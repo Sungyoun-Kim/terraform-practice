@@ -577,10 +577,9 @@ resource "kubernetes_daemon_set_v1" "node_exporter" {
           }
 
           volume_mount {
-            name              = "root"
-            mount_path        = "/host/root"
-            read_only         = true
-            mount_propagation = "HostToContainer"
+            name       = "root"
+            mount_path = "/host/root"
+            read_only  = true
           }
 
           resources {

@@ -280,6 +280,19 @@ Prometheus 로그 확인:
 kubectl --context docker-desktop -n monitoring logs deploy/prometheus
 ```
 
+node-exporter가 Docker Desktop에서 mount propagation 에러로 뜨지 않을 때:
+
+```text
+path / is mounted on / but it is not a shared or slave mount
+```
+
+이 예제는 Docker Desktop 호환성을 위해 node-exporter의 `/host/root` mount에서 `mountPropagation`을 사용하지 않습니다. 에러가 계속 남아 있으면 Terraform 코드 기준으로 DaemonSet을 다시 적용합니다.
+
+```bash
+terraform apply
+kubectl --context docker-desktop -n monitoring rollout status daemonset/node-exporter
+```
+
 ## 편의 명령
 
 `make`가 있으면 다음 명령을 사용할 수 있습니다.
