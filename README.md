@@ -2,32 +2,17 @@
 
 Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 
-현재 실습은 Docker Desktop의 Kubernetes 클러스터 위에 Prometheus, Grafana, Alertmanager, node-exporter를 올리는 구성입니다.
+현재 구성은 하나의 Terraform 프로젝트로 Docker Desktop Kubernetes 클러스터에 Helm provider를 사용해서 `prometheus-community/kube-prometheus-stack` chart를 설치합니다.
 
-이전 Docker provider 버전과 달리, 지금 구성은 Terraform이 Kubernetes 리소스를 직접 선언합니다.
+## Current Project
 
-## Current Lab
+- 대상 클러스터: Docker Desktop Kubernetes
+- Terraform providers: `helm`, `kubernetes`
+- Helm chart: `prometheus-community/kube-prometheus-stack` `86.2.2`
+- Namespace: `monitoring-helm`
+- Helm release: `prometheus-stack`
 
-- 이름: Prometheus stack on Docker Desktop Kubernetes
-- 목표: Terraform으로 Kubernetes 리소스를 선언하고 `plan`, `apply`, `destroy`, state, drift를 학습
-- 주요 리소스: Namespace, ConfigMap, Secret, PersistentVolumeClaim, Deployment, DaemonSet, Service
-
-## Labs
-
-| Path | Focus |
-| --- | --- |
-| `.` | Kubernetes provider로 리소스를 직접 선언 |
-| `labs/helm-kube-prometheus-stack` | Helm provider로 kube-prometheus-stack chart 설치 |
-
-Terraform으로 생성하는 리소스:
-
-- Namespace
-- ConfigMap
-- Secret
-- PersistentVolumeClaim
-- Deployment
-- DaemonSet
-- Service
+Terraform이 직접 관리하는 최상위 리소스는 Kubernetes namespace와 Helm release입니다. Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, Prometheus Operator 같은 세부 Kubernetes 리소스는 Helm chart가 생성합니다.
 
 ## 사전 준비
 
@@ -37,15 +22,16 @@ Terraform으로 생성하는 리소스:
 - Docker Desktop Kubernetes 활성화
 - Terraform CLI 설치
 - kubectl 설치
+- Helm CLI 설치
 
 Docker Desktop Kubernetes 확인:
 
 ```bash
-kubectl config get-contexts
+kubectl config current-context
 kubectl --context docker-desktop get nodes
 ```
 
-이 repo는 실수로 다른 클러스터에 배포하지 않도록 Terraform provider가 기본적으로 `docker-desktop` context를 사용합니다.
+이 repo는 실수로 다른 클러스터에 배포하지 않도록 기본 context를 `docker-desktop`으로 둡니다.
 
 ## 빠른 실행
 
@@ -58,34 +44,50 @@ terraform apply
 상태 확인:
 
 ```bash
-kubectl --context docker-desktop -n monitoring get pods,svc,pvc
-```
-
-접속 주소:
-
-| 서비스 | 기본 주소 |
-| --- | --- |
-| Prometheus | <http://localhost:9090> |
-| Grafana | <http://localhost:3000> |
-| Alertmanager | <http://localhost:9093> |
-
-Grafana 기본 계정:
-
-- ID: `admin`
-- PW: `admin`
-
-Docker Desktop의 `LoadBalancer` 서비스가 localhost로 바로 붙지 않으면 port-forward를 사용합니다.
-
-```bash
-kubectl --context docker-desktop -n monitoring port-forward svc/prometheus 9090:9090
-kubectl --context docker-desktop -n monitoring port-forward svc/grafana 3000:3000
-kubectl --context docker-desktop -n monitoring port-forward svc/alertmanager 9093:9093
+kubectl --context docker-desktop -n monitoring-helm get pods,svc,pvc
+helm status prometheus-stack -n monitoring-helm
 ```
 
 정리:
 
 ```bash
 terraform destroy
+```
+
+## UI 접속
+
+이 프로젝트는 서비스를 `ClusterIP`로 둡니다. 로컬 브라우저에서 보려면 port-forward를 사용합니다.
+
+Grafana:
+
+```bash
+kubectl --context docker-desktop -n monitoring-helm port-forward svc/prometheus-stack-grafana 3001:3000
+```
+
+Prometheus:
+
+```bash
+kubectl --context docker-desktop -n monitoring-helm port-forward svc/prometheus-operated 9091:9090
+```
+
+Alertmanager:
+
+```bash
+kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanager-operated 9094:9093
+```
+
+접속 주소:
+
+| 서비스 | 주소 |
+| --- | --- |
+| Grafana | <http://localhost:3001> |
+| Prometheus | <http://localhost:9091> |
+| Alertmanager | <http://localhost:9094> |
+
+Grafana 기본 계정:
+
+```text
+admin / admin
 ```
 
 ## 추천 학습 순서
@@ -100,7 +102,7 @@ terraform destroy
 
    - `.terraform/`
    - `.terraform.lock.hcl`
-   - `versions.tf`의 Kubernetes provider 선언
+   - `versions.tf`의 Helm/Kubernetes provider 선언
 
 2. 실행 계획 읽기
 
@@ -111,12 +113,9 @@ terraform destroy
    확인할 리소스:
 
    - `kubernetes_namespace_v1.monitoring`
-   - `kubernetes_config_map_v1.*`
-   - `kubernetes_secret_v1.grafana_admin`
-   - `kubernetes_persistent_volume_claim_v1.*`
-   - `kubernetes_deployment_v1.*`
-   - `kubernetes_daemon_set_v1.node_exporter`
-   - `kubernetes_service_v1.*`
+   - `helm_release.kube_prometheus_stack`
+
+   직접 Kubernetes 리소스를 하나씩 선언할 때와 달리, Helm 방식은 Terraform state에 Helm release 단위로 잡힙니다.
 
 3. 실제 리소스 생성
 
@@ -124,81 +123,53 @@ terraform destroy
    terraform apply
    ```
 
-   Kubernetes 쪽에서도 확인합니다.
+   Kubernetes와 Helm 양쪽에서 확인합니다.
 
    ```bash
-   kubectl --context docker-desktop -n monitoring get all
-   kubectl --context docker-desktop -n monitoring get configmap,secret,pvc
+   kubectl --context docker-desktop -n monitoring-helm get all
+   helm status prometheus-stack -n monitoring-helm
    ```
 
-4. Prometheus target 확인
-
-   브라우저에서 엽니다.
-
-   - <http://localhost:9090/targets>
-   - <http://localhost:9090/alerts>
-   - <http://localhost:9090/graph>
-
-   PromQL 예시:
-
-   ```promql
-   up
-   scrape_duration_seconds
-   sum(up)
-   ```
-
-5. Grafana provisioning 확인
-
-   <http://localhost:3000> 접속 후 `admin` / `admin`으로 로그인합니다.
-
-   확인할 것:
-
-   - Prometheus datasource가 자동 생성되었는지
-   - `Terraform Learning Overview` dashboard가 자동 생성되었는지
-
-6. 일부러 alert 발생시키기
-
-   node-exporter DaemonSet을 잠시 0개로 줄입니다.
-
-   ```bash
-   kubectl --context docker-desktop -n monitoring patch daemonset node-exporter \
-     --type='json' \
-     -p='[{"op":"add","path":"/spec/template/spec/nodeSelector","value":{"learning":"break"}}]'
-   ```
-
-   1분 정도 기다린 뒤 확인합니다.
-
-   - <http://localhost:9090/alerts>
-   - <http://localhost:9093>
-
-   Terraform 코드 기준으로 다시 복구합니다.
-
-   ```bash
-   terraform apply
-   ```
-
-7. 변수를 바꿔서 plan 차이 보기
-
-   예를 들어 scrape interval을 바꿔봅니다.
-
-   ```bash
-   terraform plan -var="scrape_interval=5s"
-   terraform apply -var="scrape_interval=5s"
-   ```
-
-   Prometheus ConfigMap과 Deployment rollout이 어떻게 바뀌는지 확인합니다.
-
-8. 상태 파일 관찰
+4. Terraform state 관찰
 
    ```bash
    terraform state list
-   terraform state show kubernetes_deployment_v1.prometheus
+   terraform state show helm_release.kube_prometheus_stack
    ```
 
-   확인할 것:
+   Terraform은 chart가 만든 모든 Pod/Service를 개별 resource로 들고 있지 않고, Helm release 하나를 추적합니다.
 
-   - Terraform state가 Kubernetes 리소스와 어떻게 연결되는지
-   - kubectl로 수동 변경한 drift가 plan에 어떻게 잡히는지
+5. Helm values 변경해보기
+
+   `values/kube-prometheus-stack.yaml`에서 Grafana, Prometheus, Alertmanager 설정을 바꾼 뒤 plan을 봅니다.
+
+   ```bash
+   terraform plan
+   terraform apply
+   ```
+
+6. Chart 버전 변경해보기
+
+   `variables.tf` 또는 `terraform.tfvars`의 `chart_version`을 바꾸면 Helm chart upgrade 흐름을 실습할 수 있습니다.
+
+   ```bash
+   terraform plan -var="chart_version=86.2.2"
+   ```
+
+7. Helm CLI로 내부 보기
+
+   ```bash
+   helm get values prometheus-stack -n monitoring-helm
+   helm get manifest prometheus-stack -n monitoring-helm
+   kubectl --context docker-desktop -n monitoring-helm get servicemonitor,podmonitor,prometheusrule
+   ```
+
+8. plan 결과 파일로 저장하기
+
+   ```bash
+   terraform plan -out=plan.tfplan
+   terraform show -no-color plan.tfplan > plan.txt
+   ```
 
 9. 전체 삭제
 
@@ -209,7 +180,7 @@ terraform destroy
    삭제 뒤 확인합니다.
 
    ```bash
-   kubectl --context docker-desktop get namespace monitoring
+   kubectl --context docker-desktop get namespace monitoring-helm
    ```
 
 ## 파일 구조
@@ -221,105 +192,23 @@ terraform destroy
 ├── versions.tf
 ├── variables.tf
 ├── outputs.tf
-├── locals.tf
 ├── terraform.tfvars.example
-├── templates/
-│   ├── prometheus.yml.tftpl
-│   └── learning.rules.yml.tftpl
-├── config/
-│   ├── alertmanager/
-│   │   └── alertmanager.yml
-│   └── grafana/
-│       ├── dashboards/
-│       │   └── terraform-learning-overview.json
-│       └── provisioning/
-│           ├── dashboards/
-│           │   └── dashboards.yml
-│           └── datasources/
-│               └── prometheus.yml
+├── values/
+│   └── kube-prometheus-stack.yaml
+├── Makefile
 └── README.md
 ```
 
-## 주요 파일 읽는 순서
+## Makefile
 
-1. `versions.tf`: Terraform/provider 버전
-2. `providers.tf`: Kubernetes provider와 kubeconfig context
-3. `variables.tf`: 조절 가능한 입력값
-4. `locals.tf`: Kubernetes 리소스 이름과 label 규칙
-5. `main.tf`: Kubernetes 리소스 본문
-6. `templates/prometheus.yml.tftpl`: Prometheus scrape 설정
-7. `templates/learning.rules.yml.tftpl`: alert rule
-8. `config/grafana/provisioning/datasources/prometheus.yml`: Grafana datasource 자동 등록
-9. `config/grafana/provisioning/dashboards/dashboards.yml`: Grafana dashboard 자동 등록
-
-## 자주 부딪히는 문제
-
-Docker Desktop Kubernetes가 꺼져 있음:
-
-```text
-The connection to the server localhost:6443 was refused
-```
-
-해결:
-
-- Docker Desktop 설정에서 Kubernetes를 활성화
-- Docker Desktop 재시작
-
-다른 Kubernetes context에 배포될까 걱정될 때:
-
-```bash
-terraform plan -var="kubernetes_context=docker-desktop"
-```
-
-TLS 인증서 문제가 날 때:
-
-```text
-x509: certificate signed by unknown authority
-```
-
-우선 Docker Desktop Kubernetes를 재시작하거나 reset하는 편이 좋습니다. 로컬 학습용 임시 우회가 필요하면:
-
-```bash
-terraform plan -var="kubernetes_insecure_skip_tls_verify=true"
-```
-
-Grafana 로그 확인:
-
-```bash
-kubectl --context docker-desktop -n monitoring logs deploy/grafana
-```
-
-Prometheus 로그 확인:
-
-```bash
-kubectl --context docker-desktop -n monitoring logs deploy/prometheus
-```
-
-node-exporter가 Docker Desktop에서 mount propagation 에러로 뜨지 않을 때:
-
-```text
-path / is mounted on / but it is not a shared or slave mount
-```
-
-이 예제는 Docker Desktop 호환성을 위해 node-exporter의 `/host/root` mount에서 `mountPropagation`을 사용하지 않습니다. 에러가 계속 남아 있으면 Terraform 코드 기준으로 DaemonSet을 다시 적용합니다.
-
-```bash
-terraform apply
-kubectl --context docker-desktop -n monitoring rollout status daemonset/node-exporter
-```
-
-## 편의 명령
-
-`make`가 있으면 다음 명령을 사용할 수 있습니다.
+자주 쓰는 명령은 `make`로도 실행할 수 있습니다.
 
 ```bash
 make init
+make validate
 make plan
 make apply
-make validate
 make ps
-make services
-make pvc
+make helm-status
 make port-forward-grafana
-make destroy
 ```

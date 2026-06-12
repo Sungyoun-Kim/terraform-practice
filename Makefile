@@ -1,4 +1,8 @@
-.PHONY: init fmt validate plan apply destroy output ps services pvc logs-prometheus logs-grafana logs-alertmanager port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
+CONTEXT ?= docker-desktop
+NAMESPACE ?= monitoring-helm
+RELEASE ?= prometheus-stack
+
+.PHONY: init fmt validate plan plan-file apply destroy output state ps services pvc helm-status helm-values helm-manifest port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
 
 init:
 	terraform init
@@ -13,6 +17,10 @@ validate:
 plan:
 	terraform plan
 
+plan-file:
+	terraform plan -out=plan.tfplan
+	terraform show -no-color plan.tfplan > plan.txt
+
 apply:
 	terraform apply
 
@@ -22,34 +30,37 @@ destroy:
 output:
 	terraform output
 
+state:
+	terraform state list
+
 ps:
-	kubectl --context docker-desktop -n monitoring get pods
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) get pods
 
 services:
-	kubectl --context docker-desktop -n monitoring get svc
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) get svc
 
 pvc:
-	kubectl --context docker-desktop -n monitoring get pvc
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) get pvc
 
-logs-prometheus:
-	kubectl --context docker-desktop -n monitoring logs deploy/prometheus
+helm-status:
+	helm status $(RELEASE) -n $(NAMESPACE)
 
-logs-alertmanager:
-	kubectl --context docker-desktop -n monitoring logs deploy/alertmanager
+helm-values:
+	helm get values $(RELEASE) -n $(NAMESPACE)
 
-logs-grafana:
-	kubectl --context docker-desktop -n monitoring logs deploy/grafana
+helm-manifest:
+	helm get manifest $(RELEASE) -n $(NAMESPACE)
 
 port-forward-prometheus:
-	kubectl --context docker-desktop -n monitoring port-forward svc/prometheus 9090:9090
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) port-forward svc/prometheus-operated 9091:9090
 
 port-forward-grafana:
-	kubectl --context docker-desktop -n monitoring port-forward svc/grafana 3000:3000
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) port-forward svc/$(RELEASE)-grafana 3001:3000
 
 port-forward-alertmanager:
-	kubectl --context docker-desktop -n monitoring port-forward svc/alertmanager 9093:9093
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) port-forward svc/alertmanager-operated 9094:9093
 
 urls:
-	@terraform output prometheus_url
-	@terraform output grafana_url
-	@terraform output alertmanager_url
+	@echo "Grafana:      http://localhost:3001"
+	@echo "Prometheus:   http://localhost:9091"
+	@echo "Alertmanager: http://localhost:9094"
