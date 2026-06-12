@@ -1,4 +1,4 @@
-.PHONY: init fmt validate plan apply destroy output ps logs-prometheus logs-grafana logs-alertmanager urls
+.PHONY: init fmt validate plan apply destroy output ps services pvc logs-prometheus logs-grafana logs-alertmanager port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
 
 init:
 	terraform init
@@ -23,18 +23,33 @@ output:
 	terraform output
 
 ps:
-	docker ps --filter "name=tf-prometheus-stack"
+	kubectl --context docker-desktop -n monitoring get pods
+
+services:
+	kubectl --context docker-desktop -n monitoring get svc
+
+pvc:
+	kubectl --context docker-desktop -n monitoring get pvc
 
 logs-prometheus:
-	docker logs tf-prometheus-stack-prometheus
-
-logs-grafana:
-	docker logs tf-prometheus-stack-grafana
+	kubectl --context docker-desktop -n monitoring logs deploy/prometheus
 
 logs-alertmanager:
-	docker logs tf-prometheus-stack-alertmanager
+	kubectl --context docker-desktop -n monitoring logs deploy/alertmanager
+
+logs-grafana:
+	kubectl --context docker-desktop -n monitoring logs deploy/grafana
+
+port-forward-prometheus:
+	kubectl --context docker-desktop -n monitoring port-forward svc/prometheus 9090:9090
+
+port-forward-grafana:
+	kubectl --context docker-desktop -n monitoring port-forward svc/grafana 3000:3000
+
+port-forward-alertmanager:
+	kubectl --context docker-desktop -n monitoring port-forward svc/alertmanager 9093:9093
 
 urls:
-	@echo "Prometheus:   http://localhost:9090"
-	@echo "Grafana:      http://localhost:3000"
-	@echo "Alertmanager: http://localhost:9093"
+	@terraform output prometheus_url
+	@terraform output grafana_url
+	@terraform output alertmanager_url

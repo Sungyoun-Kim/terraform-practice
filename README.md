@@ -1,50 +1,36 @@
-# Terraform Prometheus Stack on Docker Desktop
+# Terraform Prometheus Stack on Docker Desktop Kubernetes
 
-로컬 Terraform 학습을 위해 Docker Desktop 위에 Prometheus, Grafana, Alertmanager, node-exporter를 올리는 예제입니다.
+로컬 Terraform 학습을 위해 Docker Desktop의 Kubernetes 클러스터 위에 Prometheus, Grafana, Alertmanager, node-exporter를 올리는 예제입니다.
 
-기본 목표는 운영용 완성본이 아니라, Terraform이 Docker 리소스를 어떻게 선언하고 변경하고 삭제하는지 손으로 확인하는 것입니다.
-
-## 구성
+이전 Docker provider 버전과 달리, 지금 구성은 Terraform이 Kubernetes 리소스를 직접 선언합니다.
 
 Terraform으로 생성하는 리소스:
 
-- Docker network 1개
-- Docker volume 3개
-- Prometheus 컨테이너
-- Grafana 컨테이너
-- Alertmanager 컨테이너
-- node-exporter 컨테이너
-- 선택 사항: cAdvisor 컨테이너
-- Prometheus 설정 파일과 alert rule 생성
-
-접속 주소:
-
-| 서비스 | 주소 | 용도 |
-| --- | --- | --- |
-| Prometheus | <http://localhost:9090> | metric query, target 상태, alert 확인 |
-| Grafana | <http://localhost:3000> | dashboard 확인 |
-| Alertmanager | <http://localhost:9093> | firing alert 라우팅 확인 |
-| node-exporter | <http://localhost:9100/metrics> | node metric 원문 확인 |
-| cAdvisor | <http://localhost:8080> | 선택 사항, 컨테이너 metric 확인 |
-
-Grafana 기본 계정:
-
-- ID: `admin`
-- PW: `admin`
+- Namespace
+- ConfigMap
+- Secret
+- PersistentVolumeClaim
+- Deployment
+- DaemonSet
+- Service
 
 ## 사전 준비
 
 필요한 것:
 
 - Docker Desktop 실행 중
+- Docker Desktop Kubernetes 활성화
 - Terraform CLI 설치
+- kubectl 설치
 
-확인:
+Docker Desktop Kubernetes 확인:
 
 ```bash
-docker version
-terraform version
+kubectl config get-contexts
+kubectl --context docker-desktop get nodes
 ```
+
+이 repo는 실수로 다른 클러스터에 배포하지 않도록 Terraform provider가 기본적으로 `docker-desktop` context를 사용합니다.
 
 ## 빠른 실행
 
@@ -54,7 +40,32 @@ terraform plan
 terraform apply
 ```
 
-`terraform apply`가 끝나면 output에 Prometheus, Grafana, Alertmanager URL이 출력됩니다.
+상태 확인:
+
+```bash
+kubectl --context docker-desktop -n monitoring get pods,svc,pvc
+```
+
+접속 주소:
+
+| 서비스 | 기본 주소 |
+| --- | --- |
+| Prometheus | <http://localhost:9090> |
+| Grafana | <http://localhost:3000> |
+| Alertmanager | <http://localhost:9093> |
+
+Grafana 기본 계정:
+
+- ID: `admin`
+- PW: `admin`
+
+Docker Desktop의 `LoadBalancer` 서비스가 localhost로 바로 붙지 않으면 port-forward를 사용합니다.
+
+```bash
+kubectl --context docker-desktop -n monitoring port-forward svc/prometheus 9090:9090
+kubectl --context docker-desktop -n monitoring port-forward svc/grafana 3000:3000
+kubectl --context docker-desktop -n monitoring port-forward svc/alertmanager 9093:9093
+```
 
 정리:
 
@@ -72,9 +83,9 @@ terraform destroy
 
    확인할 것:
 
-   - `.terraform/` 디렉토리
+   - `.terraform/`
    - `.terraform.lock.hcl`
-   - `versions.tf`의 provider 선언
+   - `versions.tf`의 Kubernetes provider 선언
 
 2. 실행 계획 읽기
 
@@ -82,13 +93,15 @@ terraform destroy
    terraform plan
    ```
 
-   확인할 것:
+   확인할 리소스:
 
-   - `docker_network.monitoring`
-   - `docker_volume.*`
-   - `docker_image.*`
-   - `docker_container.*`
-   - `local_file.prometheus_config`
+   - `kubernetes_namespace_v1.monitoring`
+   - `kubernetes_config_map_v1.*`
+   - `kubernetes_secret_v1.grafana_admin`
+   - `kubernetes_persistent_volume_claim_v1.*`
+   - `kubernetes_deployment_v1.*`
+   - `kubernetes_daemon_set_v1.node_exporter`
+   - `kubernetes_service_v1.*`
 
 3. 실제 리소스 생성
 
@@ -96,12 +109,11 @@ terraform destroy
    terraform apply
    ```
 
-   Docker 쪽에서도 확인합니다.
+   Kubernetes 쪽에서도 확인합니다.
 
    ```bash
-   docker ps
-   docker network ls
-   docker volume ls
+   kubectl --context docker-desktop -n monitoring get all
+   kubectl --context docker-desktop -n monitoring get configmap,secret,pvc
    ```
 
 4. Prometheus target 확인
@@ -131,10 +143,12 @@ terraform destroy
 
 6. 일부러 alert 발생시키기
 
-   node-exporter를 잠시 멈춥니다.
+   node-exporter DaemonSet을 잠시 0개로 줄입니다.
 
    ```bash
-   docker stop tf-prometheus-stack-node-exporter
+   kubectl --context docker-desktop -n monitoring patch daemonset node-exporter \
+     --type='json' \
+     -p='[{"op":"add","path":"/spec/template/spec/nodeSelector","value":{"learning":"break"}}]'
    ```
 
    1분 정도 기다린 뒤 확인합니다.
@@ -142,10 +156,10 @@ terraform destroy
    - <http://localhost:9090/alerts>
    - <http://localhost:9093>
 
-   다시 복구합니다.
+   Terraform 코드 기준으로 다시 복구합니다.
 
    ```bash
-   docker start tf-prometheus-stack-node-exporter
+   terraform apply
    ```
 
 7. 변수를 바꿔서 plan 차이 보기
@@ -157,44 +171,31 @@ terraform destroy
    terraform apply -var="scrape_interval=5s"
    ```
 
-   Prometheus 설정 파일이 다시 생성되고, Prometheus 컨테이너가 교체되는지 확인합니다.
+   Prometheus ConfigMap과 Deployment rollout이 어떻게 바뀌는지 확인합니다.
 
-8. cAdvisor 옵션 켜보기
-
-   cAdvisor는 컨테이너 metric을 보기 좋지만, Docker Desktop의 파일 공유/마운트 정책에 따라 환경별 차이가 있습니다.
-
-   ```bash
-   terraform plan -var="enable_cadvisor=true"
-   terraform apply -var="enable_cadvisor=true"
-   ```
-
-   문제가 생기면 기본값인 `false`로 두고 학습을 이어가면 됩니다.
-
-9. 상태 파일 관찰
+8. 상태 파일 관찰
 
    ```bash
    terraform state list
-   terraform state show docker_container.prometheus
+   terraform state show kubernetes_deployment_v1.prometheus
    ```
 
    확인할 것:
 
-   - Terraform state가 실제 Docker 리소스와 어떻게 연결되는지
-   - 변수 변경이 state와 plan에 어떻게 반영되는지
+   - Terraform state가 Kubernetes 리소스와 어떻게 연결되는지
+   - kubectl로 수동 변경한 drift가 plan에 어떻게 잡히는지
 
-10. 전체 삭제
+9. 전체 삭제
 
-    ```bash
-    terraform destroy
-    ```
+   ```bash
+   terraform destroy
+   ```
 
-    삭제 뒤 확인합니다.
+   삭제 뒤 확인합니다.
 
-    ```bash
-    docker ps -a
-    docker volume ls
-    docker network ls
-    ```
+   ```bash
+   kubectl --context docker-desktop get namespace monitoring
+   ```
 
 ## 파일 구조
 
@@ -210,8 +211,6 @@ terraform destroy
 ├── templates/
 │   ├── prometheus.yml.tftpl
 │   └── learning.rules.yml.tftpl
-├── generated/
-│   └── prometheus/
 ├── config/
 │   ├── alertmanager/
 │   │   └── alertmanager.yml
@@ -228,13 +227,11 @@ terraform destroy
 
 ## 주요 파일 읽는 순서
 
-처음 볼 때는 이 순서가 편합니다.
-
 1. `versions.tf`: Terraform/provider 버전
-2. `providers.tf`: Docker provider 설정
+2. `providers.tf`: Kubernetes provider와 kubeconfig context
 3. `variables.tf`: 조절 가능한 입력값
-4. `locals.tf`: 이름 규칙
-5. `main.tf`: Docker 리소스 본문
+4. `locals.tf`: Kubernetes 리소스 이름과 label 규칙
+5. `main.tf`: Kubernetes 리소스 본문
 6. `templates/prometheus.yml.tftpl`: Prometheus scrape 설정
 7. `templates/learning.rules.yml.tftpl`: alert rule
 8. `config/grafana/provisioning/datasources/prometheus.yml`: Grafana datasource 자동 등록
@@ -242,38 +239,45 @@ terraform destroy
 
 ## 자주 부딪히는 문제
 
-포트 충돌:
+Docker Desktop Kubernetes가 꺼져 있음:
 
 ```text
-Error starting userland proxy: listen tcp 0.0.0.0:3000: bind: address already in use
+The connection to the server localhost:6443 was refused
 ```
 
 해결:
+
+- Docker Desktop 설정에서 Kubernetes를 활성화
+- Docker Desktop 재시작
+
+다른 Kubernetes context에 배포될까 걱정될 때:
 
 ```bash
-terraform apply -var="grafana_port=3001"
+terraform plan -var="kubernetes_context=docker-desktop"
 ```
 
-Docker Desktop이 꺼져 있음:
+TLS 인증서 문제가 날 때:
 
 ```text
-Cannot connect to the Docker daemon
+x509: certificate signed by unknown authority
 ```
 
-해결:
+우선 Docker Desktop Kubernetes를 재시작하거나 reset하는 편이 좋습니다. 로컬 학습용 임시 우회가 필요하면:
 
-- Docker Desktop을 실행한 뒤 다시 `terraform plan` 또는 `terraform apply`
+```bash
+terraform plan -var="kubernetes_insecure_skip_tls_verify=true"
+```
 
 Grafana 로그 확인:
 
 ```bash
-docker logs tf-prometheus-stack-grafana
+kubectl --context docker-desktop -n monitoring logs deploy/grafana
 ```
 
 Prometheus 로그 확인:
 
 ```bash
-docker logs tf-prometheus-stack-prometheus
+kubectl --context docker-desktop -n monitoring logs deploy/prometheus
 ```
 
 ## 편의 명령
@@ -286,6 +290,8 @@ make plan
 make apply
 make validate
 make ps
-make output
+make services
+make pvc
+make port-forward-grafana
 make destroy
 ```
