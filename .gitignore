@@ -12,5 +12,9 @@ generated/*
 !generated/.gitkeep
 !generated/prometheus/
 !generated/prometheus/.gitkeep
+generated/prometheus/*
+!generated/prometheus/.gitkeep
 !generated/prometheus/rules/
+!generated/prometheus/rules/.gitkeep
+generated/prometheus/rules/*
 !generated/prometheus/rules/.gitkeep
