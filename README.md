@@ -11,6 +11,7 @@ Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 - Helm chart: `prometheus-community/kube-prometheus-stack` `86.2.2`
 - Namespace: `monitoring-helm`
 - Helm release: `prometheus-stack`
+- Ingress Controller: `ingress-nginx` `4.15.1`
 
 Terraform이 직접 관리하는 최상위 리소스는 Kubernetes namespace와 Helm release입니다. Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, Prometheus Operator 같은 세부 Kubernetes 리소스는 Helm chart가 생성합니다.
 
@@ -45,6 +46,7 @@ terraform apply
 
 ```bash
 kubectl --context docker-desktop -n monitoring-helm get pods,svc,pvc
+kubectl --context docker-desktop -n monitoring-helm get ingress
 helm status prometheus-stack -n monitoring-helm
 ```
 
@@ -56,7 +58,28 @@ terraform destroy
 
 ## UI 접속
 
-이 프로젝트는 서비스를 `ClusterIP`로 둡니다. 로컬 브라우저에서 보려면 port-forward를 사용합니다.
+이 프로젝트는 `ingress-nginx`를 함께 설치해서 로컬 브라우저에서 Ingress hostname으로 접속합니다.
+
+| 서비스 | Ingress 주소 |
+| --- | --- |
+| Grafana | <http://grafana.localhost> |
+| Prometheus | <http://prometheus.localhost> |
+| Alertmanager | <http://alertmanager.localhost> |
+
+Grafana 기본 계정:
+
+```text
+admin / admin
+```
+
+Docker Desktop에서 `ingress-nginx-controller` 서비스는 `LoadBalancer` 타입으로 뜨며, 일반적으로 `localhost`의 80 포트로 연결됩니다.
+
+```bash
+kubectl --context docker-desktop -n ingress-nginx get svc
+kubectl --context docker-desktop -n monitoring-helm get ingress
+```
+
+port-forward를 쓰고 싶을 때는 아래 명령을 별도로 실행합니다.
 
 Grafana:
 
@@ -74,20 +97,6 @@ Alertmanager:
 
 ```bash
 kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanager-operated 9094:9093
-```
-
-접속 주소:
-
-| 서비스 | 주소 |
-| --- | --- |
-| Grafana | <http://localhost:3001> |
-| Prometheus | <http://localhost:9091> |
-| Alertmanager | <http://localhost:9094> |
-
-Grafana 기본 계정:
-
-```text
-admin / admin
 ```
 
 ## 추천 학습 순서
@@ -113,7 +122,10 @@ admin / admin
    확인할 리소스:
 
    - `kubernetes_namespace_v1.monitoring`
+   - `kubernetes_namespace_v1.ingress_nginx`
    - `helm_release.kube_prometheus_stack`
+   - `helm_release.ingress_nginx`
+   - `kubernetes_ingress_v1.*`
 
    직접 Kubernetes 리소스를 하나씩 선언할 때와 달리, Helm 방식은 Terraform state에 Helm release 단위로 잡힙니다.
 
@@ -127,6 +139,8 @@ admin / admin
 
    ```bash
    kubectl --context docker-desktop -n monitoring-helm get all
+   kubectl --context docker-desktop -n monitoring-helm get ingress
+   kubectl --context docker-desktop -n ingress-nginx get pods,svc
    helm status prometheus-stack -n monitoring-helm
    ```
 
@@ -135,9 +149,10 @@ admin / admin
    ```bash
    terraform state list
    terraform state show helm_release.kube_prometheus_stack
+   terraform state show helm_release.ingress_nginx
    ```
 
-   Terraform은 chart가 만든 모든 Pod/Service를 개별 resource로 들고 있지 않고, Helm release 하나를 추적합니다.
+   Terraform은 chart가 만든 모든 Pod/Service를 개별 resource로 들고 있지 않고, Helm release 단위로 추적합니다. 반면 Ingress 객체는 학습을 위해 Terraform 리소스로 직접 선언합니다.
 
 5. Helm values 변경해보기
 
@@ -188,6 +203,7 @@ admin / admin
 ```text
 .
 ├── main.tf
+├── ingress.tf
 ├── providers.tf
 ├── versions.tf
 ├── variables.tf
@@ -209,6 +225,8 @@ make validate
 make plan
 make apply
 make ps
+make ingress
+make ingress-controller
 make helm-status
-make port-forward-grafana
+make urls
 ```

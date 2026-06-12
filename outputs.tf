@@ -23,6 +23,20 @@ output "helm_status_command" {
   value       = "helm status ${var.release_name} -n ${var.namespace}"
 }
 
+output "ingress_urls" {
+  description = "Local URLs routed by ingress-nginx."
+  value = {
+    grafana      = "http://${var.grafana_ingress_host}"
+    prometheus   = "http://${var.prometheus_ingress_host}"
+    alertmanager = "http://${var.alertmanager_ingress_host}"
+  }
+}
+
+output "ingress_status_command" {
+  description = "Check ingress-nginx and monitoring Ingress resources."
+  value       = "kubectl --context ${var.kubernetes_context} get ingressclass && kubectl --context ${var.kubernetes_context} -n ${var.namespace} get ingress"
+}
+
 output "port_forward_commands" {
   description = "Use these commands to open the Helm-installed UIs without LoadBalancer port conflicts."
   value = {

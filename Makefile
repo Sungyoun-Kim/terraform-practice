@@ -2,7 +2,7 @@ CONTEXT ?= docker-desktop
 NAMESPACE ?= monitoring-helm
 RELEASE ?= prometheus-stack
 
-.PHONY: init fmt validate plan plan-file apply destroy output state ps services pvc helm-status helm-values helm-manifest port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
+.PHONY: init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller helm-status helm-values helm-manifest port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
 
 init:
 	terraform init
@@ -42,6 +42,12 @@ services:
 pvc:
 	kubectl --context $(CONTEXT) -n $(NAMESPACE) get pvc
 
+ingress:
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) get ingress
+
+ingress-controller:
+	kubectl --context $(CONTEXT) -n ingress-nginx get pods,svc
+
 helm-status:
 	helm status $(RELEASE) -n $(NAMESPACE)
 
@@ -61,6 +67,6 @@ port-forward-alertmanager:
 	kubectl --context $(CONTEXT) -n $(NAMESPACE) port-forward svc/alertmanager-operated 9094:9093
 
 urls:
-	@echo "Grafana:      http://localhost:3001"
-	@echo "Prometheus:   http://localhost:9091"
-	@echo "Alertmanager: http://localhost:9094"
+	@echo "Grafana:      http://grafana.localhost"
+	@echo "Prometheus:   http://prometheus.localhost"
+	@echo "Alertmanager: http://alertmanager.localhost"

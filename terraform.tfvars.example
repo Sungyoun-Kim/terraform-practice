@@ -6,6 +6,15 @@ kubernetes_context = "docker-desktop"
 
 chart_version = "86.2.2"
 
+ingress_nginx_namespace     = "ingress-nginx"
+ingress_nginx_release_name  = "ingress-nginx"
+ingress_nginx_chart_version = "4.15.1"
+ingress_class_name          = "nginx"
+
+grafana_ingress_host      = "grafana.localhost"
+prometheus_ingress_host   = "prometheus.localhost"
+alertmanager_ingress_host = "alertmanager.localhost"
+
 grafana_admin_user     = "admin"
 grafana_admin_password = "admin"
 
