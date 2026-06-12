@@ -1,0 +1,16 @@
+project_name = "tf-prometheus-stack"
+
+prometheus_port    = 9090
+grafana_port       = 3000
+alertmanager_port  = 9093
+node_exporter_port = 9100
+
+grafana_admin_user     = "admin"
+grafana_admin_password = "admin"
+
+scrape_interval     = "15s"
+evaluation_interval = "15s"
+
+# cAdvisor is useful for container metrics, but Docker Desktop host mounts can
+# be different across macOS/Windows/Linux. Keep it false first, then try true.
+enable_cadvisor = false
