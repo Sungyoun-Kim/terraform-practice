@@ -1,17 +1,40 @@
 locals {
-  network_name = "${var.project_name}-network"
-
-  container_names = {
-    prometheus    = "${var.project_name}-prometheus"
-    grafana       = "${var.project_name}-grafana"
-    alertmanager  = "${var.project_name}-alertmanager"
-    node_exporter = "${var.project_name}-node-exporter"
-    cadvisor      = "${var.project_name}-cadvisor"
+  names = {
+    prometheus                 = "prometheus"
+    prometheus_config          = "prometheus-config"
+    prometheus_data            = "prometheus-data"
+    grafana                    = "grafana"
+    grafana_admin              = "grafana-admin"
+    grafana_data               = "grafana-data"
+    grafana_datasource         = "grafana-datasource"
+    grafana_dashboard_provider = "grafana-dashboard-provider"
+    grafana_dashboard          = "grafana-dashboard"
+    alertmanager               = "alertmanager"
+    alertmanager_config        = "alertmanager-config"
+    alertmanager_data          = "alertmanager-data"
+    node_exporter              = "node-exporter"
   }
 
-  volume_names = {
-    prometheus   = "${var.project_name}-prometheus-data"
-    grafana      = "${var.project_name}-grafana-data"
-    alertmanager = "${var.project_name}-alertmanager-data"
+  common_labels = {
+    "app.kubernetes.io/part-of"    = var.project_name
+    "app.kubernetes.io/managed-by" = "terraform"
+  }
+
+  selector_labels = {
+    prometheus = {
+      "app.kubernetes.io/name" = local.names.prometheus
+    }
+
+    grafana = {
+      "app.kubernetes.io/name" = local.names.grafana
+    }
+
+    alertmanager = {
+      "app.kubernetes.io/name" = local.names.alertmanager
+    }
+
+    node_exporter = {
+      "app.kubernetes.io/name" = local.names.node_exporter
+    }
   }
 }

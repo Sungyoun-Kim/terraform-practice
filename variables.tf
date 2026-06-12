@@ -1,7 +1,31 @@
 variable "project_name" {
-  description = "Prefix used for Docker container, network, and volume names."
+  description = "Logical project label used across Kubernetes resources."
   type        = string
   default     = "tf-prometheus-stack"
+}
+
+variable "namespace" {
+  description = "Kubernetes namespace where the monitoring stack is deployed."
+  type        = string
+  default     = "monitoring"
+}
+
+variable "kubeconfig_path" {
+  description = "Path to the kubeconfig file used by the Kubernetes provider."
+  type        = string
+  default     = "~/.kube/config"
+}
+
+variable "kubernetes_context" {
+  description = "Kubeconfig context to use. Docker Desktop normally creates a context named docker-desktop."
+  type        = string
+  default     = "docker-desktop"
+}
+
+variable "kubernetes_insecure_skip_tls_verify" {
+  description = "Skip Kubernetes API TLS certificate verification. Use only for local broken Docker Desktop kubeconfig setups."
+  type        = bool
+  default     = false
 }
 
 variable "prometheus_version" {
@@ -28,40 +52,63 @@ variable "node_exporter_version" {
   default     = "v1.8.2"
 }
 
-variable "cadvisor_version" {
-  description = "cAdvisor Docker image tag. Used only when enable_cadvisor is true."
+variable "service_type" {
+  description = "Kubernetes Service type for browser-facing services."
   type        = string
-  default     = "v0.49.1"
+  default     = "LoadBalancer"
+
+  validation {
+    condition     = contains(["ClusterIP", "NodePort", "LoadBalancer"], var.service_type)
+    error_message = "service_type must be one of ClusterIP, NodePort, or LoadBalancer."
+  }
 }
 
 variable "prometheus_port" {
-  description = "Host port for Prometheus."
+  description = "Service port for Prometheus."
   type        = number
   default     = 9090
 }
 
 variable "grafana_port" {
-  description = "Host port for Grafana."
+  description = "Service port for Grafana."
   type        = number
   default     = 3000
 }
 
 variable "alertmanager_port" {
-  description = "Host port for Alertmanager."
+  description = "Service port for Alertmanager."
   type        = number
   default     = 9093
 }
 
 variable "node_exporter_port" {
-  description = "Host port for node-exporter."
+  description = "Cluster-internal Service port for node-exporter."
   type        = number
   default     = 9100
 }
 
-variable "cadvisor_port" {
-  description = "Host port for cAdvisor. Used only when enable_cadvisor is true."
-  type        = number
-  default     = 8080
+variable "storage_class_name" {
+  description = "StorageClass for PersistentVolumeClaims. Null uses the cluster default StorageClass."
+  type        = string
+  default     = null
+}
+
+variable "prometheus_storage_size" {
+  description = "Persistent storage requested by Prometheus."
+  type        = string
+  default     = "2Gi"
+}
+
+variable "grafana_storage_size" {
+  description = "Persistent storage requested by Grafana."
+  type        = string
+  default     = "1Gi"
+}
+
+variable "alertmanager_storage_size" {
+  description = "Persistent storage requested by Alertmanager."
+  type        = string
+  default     = "512Mi"
 }
 
 variable "grafana_admin_user" {
@@ -87,10 +134,4 @@ variable "evaluation_interval" {
   description = "Prometheus rule evaluation interval."
   type        = string
   default     = "15s"
-}
-
-variable "enable_cadvisor" {
-  description = "Enable the optional cAdvisor container and Prometheus scrape target."
-  type        = bool
-  default     = false
 }

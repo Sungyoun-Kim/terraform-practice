@@ -1,4 +1,10 @@
 project_name = "tf-prometheus-stack"
+namespace    = "monitoring"
+
+kubeconfig_path     = "~/.kube/config"
+kubernetes_context  = "docker-desktop"
+service_type        = "LoadBalancer"
+storage_class_name  = null
 
 prometheus_port    = 9090
 grafana_port       = 3000
@@ -11,6 +17,11 @@ grafana_admin_password = "admin"
 scrape_interval     = "15s"
 evaluation_interval = "15s"
 
-# cAdvisor is useful for container metrics, but Docker Desktop host mounts can
-# be different across macOS/Windows/Linux. Keep it false first, then try true.
-enable_cadvisor = false
+# Use this only if your local Docker Desktop kubeconfig has a broken or stale
+# certificate chain. Prefer fixing kubeconfig by restarting/resetting Docker
+# Desktop Kubernetes first.
+kubernetes_insecure_skip_tls_verify = false
+
+prometheus_storage_size   = "2Gi"
+grafana_storage_size      = "1Gi"
+alertmanager_storage_size = "512Mi"
