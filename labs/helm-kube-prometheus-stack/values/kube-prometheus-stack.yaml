@@ -1,0 +1,101 @@
+commonLabels:
+  terraform-practice/lab: helm-kube-prometheus-stack
+
+cleanPrometheusOperatorObjectNames: true
+
+grafana:
+  enabled: true
+  defaultDashboardsEnabled: true
+
+  service:
+    type: ClusterIP
+    port: 3000
+    targetPort: 3000
+
+  persistence:
+    enabled: true
+    type: pvc
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+prometheus:
+  service:
+    type: ClusterIP
+    port: 9090
+    targetPort: 9090
+
+  prometheusSpec:
+    retention: 6h
+    serviceMonitorSelectorNilUsesHelmValues: true
+    podMonitorSelectorNilUsesHelmValues: true
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+alertmanager:
+  service:
+    type: ClusterIP
+    port: 9093
+    targetPort: 9093
+
+  alertmanagerSpec:
+    retention: 6h
+
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 512Mi
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+prometheusOperator:
+  tls:
+    enabled: false
+
+  admissionWebhooks:
+    enabled: false
+
+prometheus-node-exporter:
+  hostNetwork: false
+
+  hostRootFsMount:
+    enabled: true
+    mountPropagation: ""
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi

@@ -12,6 +12,13 @@ Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 - 목표: Terraform으로 Kubernetes 리소스를 선언하고 `plan`, `apply`, `destroy`, state, drift를 학습
 - 주요 리소스: Namespace, ConfigMap, Secret, PersistentVolumeClaim, Deployment, DaemonSet, Service
 
+## Labs
+
+| Path | Focus |
+| --- | --- |
+| `.` | Kubernetes provider로 리소스를 직접 선언 |
+| `labs/helm-kube-prometheus-stack` | Helm provider로 kube-prometheus-stack chart 설치 |
+
 Terraform으로 생성하는 리소스:
 
 - Namespace
