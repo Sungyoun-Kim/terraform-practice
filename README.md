@@ -1,8 +1,16 @@
-# Terraform Prometheus Stack on Docker Desktop Kubernetes
+# Terraform Practice
 
-로컬 Terraform 학습을 위해 Docker Desktop의 Kubernetes 클러스터 위에 Prometheus, Grafana, Alertmanager, node-exporter를 올리는 예제입니다.
+Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
+
+현재 실습은 Docker Desktop의 Kubernetes 클러스터 위에 Prometheus, Grafana, Alertmanager, node-exporter를 올리는 구성입니다.
 
 이전 Docker provider 버전과 달리, 지금 구성은 Terraform이 Kubernetes 리소스를 직접 선언합니다.
+
+## Current Lab
+
+- 이름: Prometheus stack on Docker Desktop Kubernetes
+- 목표: Terraform으로 Kubernetes 리소스를 선언하고 `plan`, `apply`, `destroy`, state, drift를 학습
+- 주요 리소스: Namespace, ConfigMap, Secret, PersistentVolumeClaim, Deployment, DaemonSet, Service
 
 Terraform으로 생성하는 리소스:
 
