@@ -2,20 +2,20 @@
 
 Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 
-현재 구성은 하나의 Terraform 프로젝트로 Docker Desktop Kubernetes 클러스터에 Helm provider를 사용해서 `prometheus-community/kube-prometheus-stack` chart를 설치합니다.
+현재 구성은 Docker Desktop Kubernetes 클러스터 위에 Terraform, Helm, Argo CD를 함께 사용하는 로컬 GitOps 실습 환경입니다.
 
 ## Current Project
 
 - 대상 클러스터: Docker Desktop Kubernetes
 - Terraform providers: `helm`, `kubernetes`
-- Helm chart: `prometheus-community/kube-prometheus-stack` `86.2.2`
+- Monitoring chart: `prometheus-community/kube-prometheus-stack` `86.2.2`
 - Namespace: `monitoring-helm`
-- Helm release: `prometheus-stack`
+- Monitoring release name: `prometheus-stack`
 - Ingress Controller: `ingress-nginx` `4.15.1`
 - Argo CD: `argo/argo-cd` `9.5.21`
 - Remote backend: local MinIO through Terraform S3 backend
 
-루트 프로젝트는 `modules/ingress-nginx`와 `modules/monitoring-stack`을 조립합니다. Terraform이 직접 관리하는 최상위 리소스는 Kubernetes namespace, Helm release, Ingress입니다. Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, Prometheus Operator 같은 세부 Kubernetes 리소스는 Helm chart가 생성합니다.
+루트 프로젝트는 `modules/ingress-nginx`, `modules/argocd`, `modules/monitoring-stack`을 조립합니다. Terraform은 ingress-nginx, Argo CD, namespace, Ingress, bootstrap Application, Secret 같은 플랫폼 경계를 관리합니다. kube-prometheus-stack의 세부 Kubernetes 리소스는 Argo CD Application이 Helm chart를 렌더링해서 관리합니다.
 
 ## 사전 준비
 
@@ -50,9 +50,9 @@ make apply
 
 ```bash
 kubectl --context docker-desktop -n argocd get pods,svc,ingress
+kubectl --context docker-desktop -n argocd get application kube-prometheus-stack
 kubectl --context docker-desktop -n monitoring-helm get pods,svc,pvc
 kubectl --context docker-desktop -n monitoring-helm get ingress
-helm status prometheus-stack -n monitoring-helm
 ```
 
 정리:
@@ -180,14 +180,15 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    확인할 리소스:
 
    - `module.monitoring_stack.kubernetes_namespace_v1.monitoring`
-   - `module.monitoring_stack.helm_release.kube_prometheus_stack`
+   - `module.monitoring_stack.kubernetes_secret_v1.grafana_admin`
    - `module.monitoring_stack.kubernetes_ingress_v1.*`
    - `module.ingress_nginx.kubernetes_namespace_v1.ingress_nginx`
    - `module.ingress_nginx.helm_release.ingress_nginx`
    - `module.argocd.kubernetes_namespace_v1.argocd`
    - `module.argocd.helm_release.argocd`
+   - `kubernetes_manifest.kube_prometheus_stack_application`
 
-   직접 Kubernetes 리소스를 하나씩 선언할 때와 달리, Helm 방식은 Terraform state에 Helm release 단위로 잡힙니다.
+   kube-prometheus-stack 자체는 Terraform `helm_release`가 아니라 Argo CD `Application`으로 잡힙니다.
 
 3. 실제 리소스 생성
 
@@ -202,18 +203,18 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    kubectl --context docker-desktop -n monitoring-helm get ingress
    kubectl --context docker-desktop -n ingress-nginx get pods,svc
    kubectl --context docker-desktop -n argocd get pods,svc,ingress
-   helm status prometheus-stack -n monitoring-helm
+   kubectl --context docker-desktop -n argocd get application kube-prometheus-stack
    ```
 
 4. Terraform state 관찰
 
    ```bash
    make state
-   AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform state show module.monitoring_stack.helm_release.kube_prometheus_stack
+   AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform state show kubernetes_manifest.kube_prometheus_stack_application
    AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform state show module.ingress_nginx.helm_release.ingress_nginx
    ```
 
-   Terraform은 chart가 만든 모든 Pod/Service를 개별 resource로 들고 있지 않고, Helm release 단위로 추적합니다. 반면 Ingress 객체는 학습을 위해 Terraform 리소스로 직접 선언합니다.
+   Terraform은 chart가 만든 모든 Pod/Service를 개별 resource로 들고 있지 않고, Argo CD Application을 bootstrap 리소스로 추적합니다. Ingress와 Grafana admin Secret은 Terraform 리소스로 직접 선언합니다.
 
 5. Module 경계 보기
 
@@ -226,9 +227,11 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 
    `moved.tf`는 이전 루트 리소스 주소를 module 주소로 옮긴 기록입니다. 기존 리소스를 삭제/재생성하지 않고 코드 구조만 바꿀 때 사용합니다.
 
+   `removed.tf`는 예전에 Terraform이 관리하던 `helm_release.kube_prometheus_stack`을 destroy 없이 state에서 제거한 이관 기록입니다. 지금 kube-prometheus-stack은 Argo CD가 관리합니다.
+
 6. Helm values 변경해보기
 
-   `values/kube-prometheus-stack.yaml`에서 Grafana, Prometheus, Alertmanager 설정을 바꾼 뒤 plan을 봅니다.
+   `values/kube-prometheus-stack.yaml`에서 Grafana, Prometheus, Alertmanager 설정을 바꾼 뒤 plan/apply를 실행합니다. Terraform은 Argo CD Application spec을 바꾸고, Argo CD가 클러스터 리소스를 sync합니다.
 
    ```bash
    make plan
@@ -237,17 +240,17 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 
 7. Chart 버전 변경해보기
 
-   `variables.tf` 또는 `terraform.tfvars`의 `chart_version`을 바꾸면 Helm chart upgrade 흐름을 실습할 수 있습니다.
+   `variables.tf` 또는 `terraform.tfvars`의 `chart_version`을 바꾸면 Argo CD를 통한 Helm chart upgrade 흐름을 실습할 수 있습니다.
 
    ```bash
    AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform plan -var="chart_version=86.2.2"
    ```
 
-8. Helm CLI로 내부 보기
+8. Argo CD로 내부 보기
 
    ```bash
-   helm get values prometheus-stack -n monitoring-helm
-   helm get manifest prometheus-stack -n monitoring-helm
+   make argocd-app
+   make argocd-app-values
    kubectl --context docker-desktop -n monitoring-helm get servicemonitor,podmonitor,prometheusrule
    ```
 
@@ -275,7 +278,9 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 .
 ├── main.tf
 ├── backend.tf
+├── argocd_applications.tf
 ├── moved.tf
+├── removed.tf
 ├── providers.tf
 ├── versions.tf
 ├── variables.tf
@@ -322,6 +327,7 @@ make ps
 make ingress
 make ingress-controller
 make argocd
+make argocd-app
 make argocd-password
 make helm-status
 make urls

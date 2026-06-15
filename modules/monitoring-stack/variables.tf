@@ -13,11 +13,6 @@ variable "chart_version" {
   type        = string
 }
 
-variable "helm_values" {
-  description = "Rendered Helm values YAML documents for kube-prometheus-stack."
-  type        = list(string)
-}
-
 variable "grafana_admin_user" {
   description = "Grafana admin username."
   type        = string

@@ -7,6 +7,11 @@ grafana:
   enabled: true
   defaultDashboardsEnabled: true
 
+  admin:
+    existingSecret: prometheus-stack-grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
   service:
     type: ClusterIP
     port: 3000

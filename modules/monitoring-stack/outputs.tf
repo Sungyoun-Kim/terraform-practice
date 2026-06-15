@@ -5,12 +5,17 @@ output "namespace" {
 
 output "release_name" {
   description = "Helm release name for kube-prometheus-stack."
-  value       = helm_release.kube_prometheus_stack.name
+  value       = var.release_name
 }
 
 output "chart" {
-  description = "Helm chart and version installed by Terraform."
-  value       = "${helm_release.kube_prometheus_stack.chart}@${helm_release.kube_prometheus_stack.version}"
+  description = "Helm chart and version installed by Argo CD."
+  value       = "kube-prometheus-stack@${var.chart_version}"
+}
+
+output "grafana_admin_secret_name" {
+  description = "Secret used by Grafana for the local admin account."
+  value       = kubernetes_secret_v1.grafana_admin.metadata[0].name
 }
 
 output "ingress_urls" {

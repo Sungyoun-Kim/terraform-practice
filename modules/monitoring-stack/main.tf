@@ -9,27 +9,21 @@ resource "kubernetes_namespace_v1" "monitoring" {
   }
 }
 
-resource "helm_release" "kube_prometheus_stack" {
-  name       = var.release_name
-  repository = "https://prometheus-community.github.io/helm-charts"
-  chart      = "kube-prometheus-stack"
-  version    = var.chart_version
-  namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
+resource "kubernetes_secret_v1" "grafana_admin" {
+  metadata {
+    name      = "${var.release_name}-grafana-admin"
+    namespace = kubernetes_namespace_v1.monitoring.metadata[0].name
 
-  atomic          = true
-  cleanup_on_fail = true
-  timeout         = 900
-  wait            = true
-
-  values = var.helm_values
-
-  set {
-    name  = "grafana.adminUser"
-    value = var.grafana_admin_user
+    labels = {
+      "app.kubernetes.io/managed-by" = "terraform"
+      "terraform-practice/component" = "grafana-admin"
+    }
   }
 
-  set_sensitive {
-    name  = "grafana.adminPassword"
-    value = var.grafana_admin_password
+  data = {
+    admin-user     = var.grafana_admin_user
+    admin-password = var.grafana_admin_password
   }
+
+  type = "Opaque"
 }

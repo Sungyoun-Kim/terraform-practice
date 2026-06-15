@@ -27,7 +27,6 @@ module "monitoring_stack" {
   namespace              = var.namespace
   release_name           = var.release_name
   chart_version          = var.chart_version
-  helm_values            = [file("${path.module}/values/kube-prometheus-stack.yaml")]
   grafana_admin_user     = var.grafana_admin_user
   grafana_admin_password = var.grafana_admin_password
 

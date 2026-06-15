@@ -9,7 +9,7 @@ output "release_name" {
 }
 
 output "chart" {
-  description = "Helm chart and version installed by Terraform."
+  description = "Helm chart and version reconciled by Argo CD."
   value       = module.monitoring_stack.chart
 }
 
@@ -23,14 +23,19 @@ output "argocd_initial_password_command" {
   value       = "kubectl --context ${var.kubernetes_context} -n ${var.argocd_namespace} get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"
 }
 
+output "argocd_monitoring_application" {
+  description = "Argo CD Application managing kube-prometheus-stack."
+  value       = "${module.argocd.namespace}/${kubernetes_manifest.kube_prometheus_stack_application.manifest.metadata.name}"
+}
+
 output "status_command" {
-  description = "Check resources created by the Helm chart."
+  description = "Check monitoring resources reconciled by Argo CD."
   value       = "kubectl --context ${var.kubernetes_context} -n ${var.namespace} get pods,svc,pvc"
 }
 
-output "helm_status_command" {
-  description = "Check Helm release status."
-  value       = "helm status ${var.release_name} -n ${var.namespace}"
+output "argocd_status_command" {
+  description = "Check Argo CD and the monitoring Application."
+  value       = "kubectl --context ${var.kubernetes_context} -n ${var.argocd_namespace} get pods,svc,ingress && kubectl --context ${var.kubernetes_context} -n ${var.argocd_namespace} get application kube-prometheus-stack"
 }
 
 output "ingress_urls" {

@@ -34,9 +34,6 @@ resource "kubernetes_ingress_v1" "grafana" {
     }
   }
 
-  depends_on = [
-    helm_release.kube_prometheus_stack,
-  ]
 }
 
 resource "kubernetes_ingress_v1" "prometheus" {
@@ -75,9 +72,6 @@ resource "kubernetes_ingress_v1" "prometheus" {
     }
   }
 
-  depends_on = [
-    helm_release.kube_prometheus_stack,
-  ]
 }
 
 resource "kubernetes_ingress_v1" "alertmanager" {
@@ -116,7 +110,4 @@ resource "kubernetes_ingress_v1" "alertmanager" {
     }
   }
 
-  depends_on = [
-    helm_release.kube_prometheus_stack,
-  ]
 }
