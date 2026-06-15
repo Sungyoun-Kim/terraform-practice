@@ -12,6 +12,7 @@ Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 - Namespace: `monitoring-helm`
 - Helm release: `prometheus-stack`
 - Ingress Controller: `ingress-nginx` `4.15.1`
+- Remote backend: local MinIO through Terraform S3 backend
 
 루트 프로젝트는 `modules/ingress-nginx`와 `modules/monitoring-stack`을 조립합니다. Terraform이 직접 관리하는 최상위 리소스는 Kubernetes namespace, Helm release, Ingress입니다. Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, Prometheus Operator 같은 세부 Kubernetes 리소스는 Helm chart가 생성합니다.
 
@@ -24,6 +25,7 @@ Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 - Terraform CLI 설치
 - kubectl 설치
 - Helm CLI 설치
+- Docker Compose 설치
 
 Docker Desktop Kubernetes 확인:
 
@@ -37,9 +39,10 @@ kubectl --context docker-desktop get nodes
 ## 빠른 실행
 
 ```bash
-terraform init
-terraform plan
-terraform apply
+make backend-up
+make init
+make plan
+make apply
 ```
 
 상태 확인:
@@ -53,8 +56,52 @@ helm status prometheus-stack -n monitoring-helm
 정리:
 
 ```bash
-terraform destroy
+make destroy
 ```
+
+## Remote Backend
+
+이 repo는 로컬 MinIO를 Terraform S3 backend로 사용합니다.
+
+| 역할 | 구성 |
+| --- | --- |
+| State 저장소 | MinIO bucket `terraform-state` |
+| State key | `terraform-practice/prometheus-stack/terraform.tfstate` |
+| Lock | S3 lockfile `terraform.tfstate.tflock` |
+| MinIO API | <http://localhost:9000> |
+| MinIO Console | <http://localhost:9001> |
+
+MinIO 시작:
+
+```bash
+make backend-up
+```
+
+기존 local state를 MinIO로 이관:
+
+```bash
+make backend-migrate
+```
+
+State object 확인:
+
+```bash
+make backend-objects
+```
+
+기본 로컬 계정:
+
+```text
+minioadmin / minioadmin
+```
+
+credentials는 Terraform 코드에 넣지 않고 Makefile에서 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`로 주입합니다. 직접 Terraform 명령을 실행할 때는 아래처럼 환경변수를 함께 넘깁니다.
+
+```bash
+AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform plan
+```
+
+Docker volume `minio_minio-data`를 삭제하면 이 로컬 remote state도 삭제됩니다.
 
 ## UI 접속
 
@@ -104,19 +151,21 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 1. Provider 초기화 보기
 
    ```bash
-   terraform init
+   make init
    ```
 
    확인할 것:
 
    - `.terraform/`
    - `.terraform.lock.hcl`
+   - `backend.tf`
+   - `backend/minio/backend.hcl`
    - `versions.tf`의 Helm/Kubernetes provider 선언
 
 2. 실행 계획 읽기
 
    ```bash
-   terraform plan
+   make plan
    ```
 
    확인할 리소스:
@@ -132,7 +181,7 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 3. 실제 리소스 생성
 
    ```bash
-   terraform apply
+   make apply
    ```
 
    Kubernetes와 Helm 양쪽에서 확인합니다.
@@ -147,9 +196,9 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 4. Terraform state 관찰
 
    ```bash
-   terraform state list
-   terraform state show module.monitoring_stack.helm_release.kube_prometheus_stack
-   terraform state show module.ingress_nginx.helm_release.ingress_nginx
+   make state
+   AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform state show module.monitoring_stack.helm_release.kube_prometheus_stack
+   AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform state show module.ingress_nginx.helm_release.ingress_nginx
    ```
 
    Terraform은 chart가 만든 모든 Pod/Service를 개별 resource로 들고 있지 않고, Helm release 단위로 추적합니다. 반면 Ingress 객체는 학습을 위해 Terraform 리소스로 직접 선언합니다.
@@ -159,8 +208,8 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    루트 `main.tf`는 module 호출만 담당하고, 실제 리소스 선언은 module 내부에 있습니다.
 
    ```bash
-   terraform state list
-   terraform plan
+   make state
+   make plan
    ```
 
    `moved.tf`는 이전 루트 리소스 주소를 module 주소로 옮긴 기록입니다. 기존 리소스를 삭제/재생성하지 않고 코드 구조만 바꿀 때 사용합니다.
@@ -170,8 +219,8 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    `values/kube-prometheus-stack.yaml`에서 Grafana, Prometheus, Alertmanager 설정을 바꾼 뒤 plan을 봅니다.
 
    ```bash
-   terraform plan
-   terraform apply
+   make plan
+   make apply
    ```
 
 7. Chart 버전 변경해보기
@@ -179,7 +228,7 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    `variables.tf` 또는 `terraform.tfvars`의 `chart_version`을 바꾸면 Helm chart upgrade 흐름을 실습할 수 있습니다.
 
    ```bash
-   terraform plan -var="chart_version=86.2.2"
+   AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform plan -var="chart_version=86.2.2"
    ```
 
 8. Helm CLI로 내부 보기
@@ -193,14 +242,13 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 9. plan 결과 파일로 저장하기
 
    ```bash
-   terraform plan -out=plan.tfplan
-   terraform show -no-color plan.tfplan > plan.txt
+   make plan-file
    ```
 
 10. 전체 삭제
 
    ```bash
-   terraform destroy
+   make destroy
    ```
 
    삭제 뒤 확인합니다.
@@ -214,12 +262,18 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 ```text
 .
 ├── main.tf
+├── backend.tf
 ├── moved.tf
 ├── providers.tf
 ├── versions.tf
 ├── variables.tf
 ├── outputs.tf
 ├── terraform.tfvars.example
+├── backend/
+│   └── minio/
+│       ├── backend.hcl
+│       ├── compose.yaml
+│       └── README.md
 ├── modules/
 │   ├── ingress-nginx/
 │   │   ├── main.tf
@@ -242,6 +296,9 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 
 ```bash
 make init
+make backend-up
+make backend-migrate
+make backend-objects
 make validate
 make plan
 make apply

@@ -5,6 +5,7 @@ crash.log
 crash.*.log
 *.tfplan
 plan.txt
+backend/minio/.env
 override.tf
 override.tf.json
 *_override.tf
