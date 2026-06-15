@@ -13,6 +13,16 @@ output "chart" {
   value       = module.monitoring_stack.chart
 }
 
+output "argocd_url" {
+  description = "Local Argo CD URL routed by ingress-nginx."
+  value       = module.argocd.url
+}
+
+output "argocd_initial_password_command" {
+  description = "Command for reading the generated Argo CD admin password."
+  value       = "kubectl --context ${var.kubernetes_context} -n ${var.argocd_namespace} get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"
+}
+
 output "status_command" {
   description = "Check resources created by the Helm chart."
   value       = "kubectl --context ${var.kubernetes_context} -n ${var.namespace} get pods,svc,pvc"

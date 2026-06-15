@@ -7,6 +7,20 @@ module "ingress_nginx" {
   ingress_class_name = var.ingress_class_name
 }
 
+module "argocd" {
+  source = "./modules/argocd"
+
+  namespace          = var.argocd_namespace
+  release_name       = var.argocd_release_name
+  chart_version      = var.argocd_chart_version
+  ingress_class_name = var.ingress_class_name
+  ingress_host       = var.argocd_ingress_host
+
+  depends_on = [
+    module.ingress_nginx,
+  ]
+}
+
 module "monitoring_stack" {
   source = "./modules/monitoring-stack"
 

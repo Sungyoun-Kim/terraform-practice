@@ -1,13 +1,14 @@
 CONTEXT ?= docker-desktop
 NAMESPACE ?= monitoring-helm
 RELEASE ?= prometheus-stack
+ARGOCD_NAMESPACE ?= argocd
 BACKEND_CONFIG ?= backend/minio/backend.hcl
 MINIO_ACCESS_KEY ?= minioadmin
 MINIO_SECRET_KEY ?= minioadmin
 MINIO_COMPOSE ?= docker compose -f backend/minio/compose.yaml
 TF_BACKEND_ENV = AWS_ACCESS_KEY_ID=$(MINIO_ACCESS_KEY) AWS_SECRET_ACCESS_KEY=$(MINIO_SECRET_KEY)
 
-.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller helm-status helm-values helm-manifest port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
+.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-password helm-status helm-values helm-manifest port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
 
 backend-up:
 	$(MINIO_COMPOSE) up -d
@@ -68,6 +69,12 @@ ingress:
 ingress-controller:
 	kubectl --context $(CONTEXT) -n ingress-nginx get pods,svc
 
+argocd:
+	kubectl --context $(CONTEXT) -n $(ARGOCD_NAMESPACE) get pods,svc,ingress
+
+argocd-password:
+	kubectl --context $(CONTEXT) -n $(ARGOCD_NAMESPACE) get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+
 helm-status:
 	helm status $(RELEASE) -n $(NAMESPACE)
 
@@ -87,6 +94,7 @@ port-forward-alertmanager:
 	kubectl --context $(CONTEXT) -n $(NAMESPACE) port-forward svc/alertmanager-operated 9094:9093
 
 urls:
+	@echo "Argo CD:      http://argocd.localhost"
 	@echo "Grafana:      http://grafana.localhost"
 	@echo "Prometheus:   http://prometheus.localhost"
 	@echo "Alertmanager: http://alertmanager.localhost"

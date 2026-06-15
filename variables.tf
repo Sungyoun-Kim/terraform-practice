@@ -58,6 +58,30 @@ variable "ingress_class_name" {
   default     = "nginx"
 }
 
+variable "argocd_namespace" {
+  description = "Kubernetes namespace where Argo CD is installed."
+  type        = string
+  default     = "argocd"
+}
+
+variable "argocd_release_name" {
+  description = "Helm release name for Argo CD."
+  type        = string
+  default     = "argocd"
+}
+
+variable "argocd_chart_version" {
+  description = "argo/argo-cd Helm chart version."
+  type        = string
+  default     = "9.5.21"
+}
+
+variable "argocd_ingress_host" {
+  description = "Hostname routed to the Argo CD server."
+  type        = string
+  default     = "argocd.localhost"
+}
+
 variable "grafana_ingress_host" {
   description = "Hostname routed to Grafana through ingress-nginx."
   type        = string

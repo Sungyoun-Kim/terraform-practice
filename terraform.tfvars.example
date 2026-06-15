@@ -11,6 +11,11 @@ ingress_nginx_release_name  = "ingress-nginx"
 ingress_nginx_chart_version = "4.15.1"
 ingress_class_name          = "nginx"
 
+argocd_namespace     = "argocd"
+argocd_release_name  = "argocd"
+argocd_chart_version = "9.5.21"
+argocd_ingress_host  = "argocd.localhost"
+
 grafana_ingress_host      = "grafana.localhost"
 prometheus_ingress_host   = "prometheus.localhost"
 alertmanager_ingress_host = "alertmanager.localhost"
