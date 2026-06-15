@@ -13,7 +13,7 @@ Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 - Helm release: `prometheus-stack`
 - Ingress Controller: `ingress-nginx` `4.15.1`
 
-Terraform이 직접 관리하는 최상위 리소스는 Kubernetes namespace와 Helm release입니다. Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, Prometheus Operator 같은 세부 Kubernetes 리소스는 Helm chart가 생성합니다.
+루트 프로젝트는 `modules/ingress-nginx`와 `modules/monitoring-stack`을 조립합니다. Terraform이 직접 관리하는 최상위 리소스는 Kubernetes namespace, Helm release, Ingress입니다. Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, Prometheus Operator 같은 세부 Kubernetes 리소스는 Helm chart가 생성합니다.
 
 ## 사전 준비
 
@@ -121,11 +121,11 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 
    확인할 리소스:
 
-   - `kubernetes_namespace_v1.monitoring`
-   - `kubernetes_namespace_v1.ingress_nginx`
-   - `helm_release.kube_prometheus_stack`
-   - `helm_release.ingress_nginx`
-   - `kubernetes_ingress_v1.*`
+   - `module.monitoring_stack.kubernetes_namespace_v1.monitoring`
+   - `module.monitoring_stack.helm_release.kube_prometheus_stack`
+   - `module.monitoring_stack.kubernetes_ingress_v1.*`
+   - `module.ingress_nginx.kubernetes_namespace_v1.ingress_nginx`
+   - `module.ingress_nginx.helm_release.ingress_nginx`
 
    직접 Kubernetes 리소스를 하나씩 선언할 때와 달리, Helm 방식은 Terraform state에 Helm release 단위로 잡힙니다.
 
@@ -148,13 +148,24 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 
    ```bash
    terraform state list
-   terraform state show helm_release.kube_prometheus_stack
-   terraform state show helm_release.ingress_nginx
+   terraform state show module.monitoring_stack.helm_release.kube_prometheus_stack
+   terraform state show module.ingress_nginx.helm_release.ingress_nginx
    ```
 
    Terraform은 chart가 만든 모든 Pod/Service를 개별 resource로 들고 있지 않고, Helm release 단위로 추적합니다. 반면 Ingress 객체는 학습을 위해 Terraform 리소스로 직접 선언합니다.
 
-5. Helm values 변경해보기
+5. Module 경계 보기
+
+   루트 `main.tf`는 module 호출만 담당하고, 실제 리소스 선언은 module 내부에 있습니다.
+
+   ```bash
+   terraform state list
+   terraform plan
+   ```
+
+   `moved.tf`는 이전 루트 리소스 주소를 module 주소로 옮긴 기록입니다. 기존 리소스를 삭제/재생성하지 않고 코드 구조만 바꿀 때 사용합니다.
+
+6. Helm values 변경해보기
 
    `values/kube-prometheus-stack.yaml`에서 Grafana, Prometheus, Alertmanager 설정을 바꾼 뒤 plan을 봅니다.
 
@@ -163,7 +174,7 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    terraform apply
    ```
 
-6. Chart 버전 변경해보기
+7. Chart 버전 변경해보기
 
    `variables.tf` 또는 `terraform.tfvars`의 `chart_version`을 바꾸면 Helm chart upgrade 흐름을 실습할 수 있습니다.
 
@@ -171,7 +182,7 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    terraform plan -var="chart_version=86.2.2"
    ```
 
-7. Helm CLI로 내부 보기
+8. Helm CLI로 내부 보기
 
    ```bash
    helm get values prometheus-stack -n monitoring-helm
@@ -179,14 +190,14 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    kubectl --context docker-desktop -n monitoring-helm get servicemonitor,podmonitor,prometheusrule
    ```
 
-8. plan 결과 파일로 저장하기
+9. plan 결과 파일로 저장하기
 
    ```bash
    terraform plan -out=plan.tfplan
    terraform show -no-color plan.tfplan > plan.txt
    ```
 
-9. 전체 삭제
+10. 전체 삭제
 
    ```bash
    terraform destroy
@@ -203,12 +214,22 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 ```text
 .
 ├── main.tf
-├── ingress.tf
+├── moved.tf
 ├── providers.tf
 ├── versions.tf
 ├── variables.tf
 ├── outputs.tf
 ├── terraform.tfvars.example
+├── modules/
+│   ├── ingress-nginx/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   └── monitoring-stack/
+│       ├── main.tf
+│       ├── ingress.tf
+│       ├── variables.tf
+│       └── outputs.tf
 ├── values/
 │   └── kube-prometheus-stack.yaml
 ├── Makefile

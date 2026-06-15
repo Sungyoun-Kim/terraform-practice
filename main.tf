@@ -1,37 +1,28 @@
-resource "kubernetes_namespace_v1" "monitoring" {
-  metadata {
-    name = var.namespace
+module "ingress_nginx" {
+  source = "./modules/ingress-nginx"
 
-    labels = {
-      "app.kubernetes.io/managed-by" = "terraform"
-      "terraform-practice/lab"       = "helm-kube-prometheus-stack"
-    }
-  }
+  namespace          = var.ingress_nginx_namespace
+  release_name       = var.ingress_nginx_release_name
+  chart_version      = var.ingress_nginx_chart_version
+  ingress_class_name = var.ingress_class_name
 }
 
-resource "helm_release" "kube_prometheus_stack" {
-  name       = var.release_name
-  repository = "https://prometheus-community.github.io/helm-charts"
-  chart      = "kube-prometheus-stack"
-  version    = var.chart_version
-  namespace  = kubernetes_namespace_v1.monitoring.metadata[0].name
+module "monitoring_stack" {
+  source = "./modules/monitoring-stack"
 
-  atomic          = true
-  cleanup_on_fail = true
-  timeout         = 900
-  wait            = true
+  namespace              = var.namespace
+  release_name           = var.release_name
+  chart_version          = var.chart_version
+  helm_values            = [file("${path.module}/values/kube-prometheus-stack.yaml")]
+  grafana_admin_user     = var.grafana_admin_user
+  grafana_admin_password = var.grafana_admin_password
 
-  values = [
-    file("${path.module}/values/kube-prometheus-stack.yaml"),
+  ingress_class_name        = var.ingress_class_name
+  grafana_ingress_host      = var.grafana_ingress_host
+  prometheus_ingress_host   = var.prometheus_ingress_host
+  alertmanager_ingress_host = var.alertmanager_ingress_host
+
+  depends_on = [
+    module.ingress_nginx,
   ]
-
-  set {
-    name  = "grafana.adminUser"
-    value = var.grafana_admin_user
-  }
-
-  set_sensitive {
-    name  = "grafana.adminPassword"
-    value = var.grafana_admin_password
-  }
 }

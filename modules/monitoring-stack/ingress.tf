@@ -1,49 +1,3 @@
-resource "kubernetes_namespace_v1" "ingress_nginx" {
-  metadata {
-    name = var.ingress_nginx_namespace
-
-    labels = {
-      "app.kubernetes.io/managed-by" = "terraform"
-      "terraform-practice/component" = "ingress-nginx"
-    }
-  }
-}
-
-resource "helm_release" "ingress_nginx" {
-  name       = var.ingress_nginx_release_name
-  repository = "https://kubernetes.github.io/ingress-nginx"
-  chart      = "ingress-nginx"
-  version    = var.ingress_nginx_chart_version
-  namespace  = kubernetes_namespace_v1.ingress_nginx.metadata[0].name
-
-  atomic          = true
-  cleanup_on_fail = true
-  timeout         = 600
-  wait            = true
-
-  values = [
-    yamlencode({
-      controller = {
-        ingressClass = var.ingress_class_name
-
-        ingressClassResource = {
-          enabled = true
-          name    = var.ingress_class_name
-          default = false
-        }
-
-        admissionWebhooks = {
-          enabled = false
-        }
-
-        service = {
-          type = "LoadBalancer"
-        }
-      }
-    }),
-  ]
-}
-
 resource "kubernetes_ingress_v1" "grafana" {
   metadata {
     name      = "grafana"
@@ -81,7 +35,6 @@ resource "kubernetes_ingress_v1" "grafana" {
   }
 
   depends_on = [
-    helm_release.ingress_nginx,
     helm_release.kube_prometheus_stack,
   ]
 }
@@ -123,7 +76,6 @@ resource "kubernetes_ingress_v1" "prometheus" {
   }
 
   depends_on = [
-    helm_release.ingress_nginx,
     helm_release.kube_prometheus_stack,
   ]
 }
@@ -165,7 +117,6 @@ resource "kubernetes_ingress_v1" "alertmanager" {
   }
 
   depends_on = [
-    helm_release.ingress_nginx,
     helm_release.kube_prometheus_stack,
   ]
 }

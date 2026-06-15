@@ -1,16 +1,16 @@
 output "namespace" {
-  description = "Namespace used by this Helm lab."
-  value       = kubernetes_namespace_v1.monitoring.metadata[0].name
+  description = "Namespace used by the monitoring stack."
+  value       = module.monitoring_stack.namespace
 }
 
 output "release_name" {
-  description = "Helm release name."
-  value       = helm_release.kube_prometheus_stack.name
+  description = "Helm release name for kube-prometheus-stack."
+  value       = module.monitoring_stack.release_name
 }
 
 output "chart" {
   description = "Helm chart and version installed by Terraform."
-  value       = "${helm_release.kube_prometheus_stack.chart}@${helm_release.kube_prometheus_stack.version}"
+  value       = module.monitoring_stack.chart
 }
 
 output "status_command" {
@@ -25,11 +25,7 @@ output "helm_status_command" {
 
 output "ingress_urls" {
   description = "Local URLs routed by ingress-nginx."
-  value = {
-    grafana      = "http://${var.grafana_ingress_host}"
-    prometheus   = "http://${var.prometheus_ingress_host}"
-    alertmanager = "http://${var.alertmanager_ingress_host}"
-  }
+  value       = module.monitoring_stack.ingress_urls
 }
 
 output "ingress_status_command" {
