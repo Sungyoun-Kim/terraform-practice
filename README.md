@@ -279,9 +279,9 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    make registry-tags
    ```
 
-   샘플 앱은 `charts/hello-app/values-local.yaml`의 image 값을 사용합니다. `docs/github-actions/update-hello-app-image.yaml`은 이미지를 build/push하고 이 values 파일을 바꾸는 PR을 만들도록 작성된 GitHub Actions 템플릿입니다. 실제 GitHub Actions로 활성화하려면 GitHub 토큰에 `workflow` scope가 있는 상태에서 이 파일을 `.github/workflows/update-hello-app-image.yaml`로 옮깁니다.
+   샘플 앱은 `charts/hello-app/values-local.yaml`의 image 값을 사용합니다. `.github/workflows/update-hello-app-image.yaml` workflow는 이미지를 build/push하고 이 values 파일을 바꾸는 PR을 만들도록 작성되어 있습니다.
 
-   GitHub-hosted runner의 `localhost`는 이 Mac이 아니라 GitHub runner 자신입니다. 그래서 `localhost:5001` registry는 GitHub-hosted Actions에서 접근할 수 없습니다. 로컬 registry로 실습하려면 이 Mac에 self-hosted runner를 붙이거나, GitHub-hosted runner를 쓸 때는 GHCR/ECR 같은 외부 registry를 사용합니다.
+   GitHub-hosted runner의 `localhost`는 이 Mac이 아니라 GitHub runner 자신입니다. 그래서 `localhost:5001` registry는 GitHub-hosted Actions에서 접근할 수 없습니다. 로컬 registry로 실습하려면 이 Mac에 self-hosted runner를 붙이고 workflow dispatch 입력의 runner를 `self-hosted`로 둡니다. GitHub-hosted runner를 쓸 때는 GHCR/ECR 같은 외부 registry를 사용합니다.
 
    배포 흐름은 아래처럼 읽으면 됩니다.
 
@@ -343,8 +343,8 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 │   └── root/
 │       ├── hello-app.yaml
 │       └── local-platform-project.yaml
-├── docs/
-│   └── github-actions/
+├── .github/
+│   └── workflows/
 │       └── update-hello-app-image.yaml
 ├── modules/
 │   ├── ingress-nginx/
