@@ -3,13 +3,20 @@ NAMESPACE ?= monitoring-helm
 RELEASE ?= prometheus-stack
 ARGOCD_NAMESPACE ?= argocd
 ARGOCD_APP ?= kube-prometheus-stack
+ARGOCD_ROOT_APP ?= terraform-practice-root
+HELLO_APP_NAMESPACE ?= hello-app
 BACKEND_CONFIG ?= backend/minio/backend.hcl
 MINIO_ACCESS_KEY ?= minioadmin
 MINIO_SECRET_KEY ?= minioadmin
 MINIO_COMPOSE ?= docker compose -f backend/minio/compose.yaml
 TF_BACKEND_ENV = AWS_ACCESS_KEY_ID=$(MINIO_ACCESS_KEY) AWS_SECRET_ACCESS_KEY=$(MINIO_SECRET_KEY)
+REGISTRY_HOST ?= localhost:5001
+REGISTRY_COMPOSE ?= docker compose -f backend/registry/compose.yaml
+DEMO_APP_NAME ?= terraform-practice/hello-app
+DEMO_APP_TAG ?= 0.1.0-local
+DEMO_IMAGE ?= $(REGISTRY_HOST)/$(DEMO_APP_NAME):$(DEMO_APP_TAG)
 
-.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-apps argocd-app argocd-app-values argocd-password helm-status port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
+.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate registry-up registry-down registry-logs registry-catalog registry-tags demo-image-build demo-image-push demo-image init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-apps argocd-app argocd-root-app argocd-app-values argocd-password hello-app helm-status port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
 
 backend-up:
 	$(MINIO_COMPOSE) up -d
@@ -25,6 +32,29 @@ backend-objects:
 
 backend-migrate:
 	$(TF_BACKEND_ENV) terraform init -backend-config=$(BACKEND_CONFIG) -migrate-state -force-copy
+
+registry-up:
+	$(REGISTRY_COMPOSE) up -d
+
+registry-down:
+	$(REGISTRY_COMPOSE) down
+
+registry-logs:
+	$(REGISTRY_COMPOSE) logs -f registry
+
+registry-catalog:
+	curl -fsS http://$(REGISTRY_HOST)/v2/_catalog; echo
+
+registry-tags:
+	curl -fsS http://$(REGISTRY_HOST)/v2/$(DEMO_APP_NAME)/tags/list; echo
+
+demo-image-build:
+	docker build -t $(DEMO_IMAGE) apps/hello-app
+
+demo-image-push:
+	docker push $(DEMO_IMAGE)
+
+demo-image: registry-up demo-image-build demo-image-push
 
 init:
 	$(TF_BACKEND_ENV) terraform init -backend-config=$(BACKEND_CONFIG)
@@ -79,11 +109,17 @@ argocd-apps:
 argocd-app:
 	kubectl --context $(CONTEXT) -n $(ARGOCD_NAMESPACE) get application $(ARGOCD_APP) -o wide
 
+argocd-root-app:
+	kubectl --context $(CONTEXT) -n $(ARGOCD_NAMESPACE) get application $(ARGOCD_ROOT_APP) -o wide
+
 argocd-app-values:
 	kubectl --context $(CONTEXT) -n $(ARGOCD_NAMESPACE) get application $(ARGOCD_APP) -o jsonpath='{.spec.source.helm.values}'
 
 argocd-password:
 	kubectl --context $(CONTEXT) -n $(ARGOCD_NAMESPACE) get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+
+hello-app:
+	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) get pods,svc,ingress
 
 helm-status:
 	helm status argocd -n $(ARGOCD_NAMESPACE)
@@ -100,6 +136,7 @@ port-forward-alertmanager:
 
 urls:
 	@echo "Argo CD:      http://argocd.localhost"
+	@echo "Hello App:    http://hello.localhost"
 	@echo "Grafana:      http://grafana.localhost"
 	@echo "Prometheus:   http://prometheus.localhost"
 	@echo "Alertmanager: http://alertmanager.localhost"
