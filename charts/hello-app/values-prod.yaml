@@ -1,0 +1,16 @@
+environment:
+  name: prod
+
+replicaCount: 2
+
+image:
+  repository: localhost:5001/terraform-practice/hello-app
+  tag: "act-20260616115731"
+  pullPolicy: IfNotPresent
+
+ingress:
+  hosts:
+    - host: hello-prod.localhost
+      paths:
+        - path: /
+          pathType: Prefix

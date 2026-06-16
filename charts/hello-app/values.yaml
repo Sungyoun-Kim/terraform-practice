@@ -1,5 +1,8 @@
 replicaCount: 1
 
+environment:
+  name: local
+
 image:
   repository: nginx
   tag: "1.27-alpine"
