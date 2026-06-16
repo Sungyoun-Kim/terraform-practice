@@ -12,6 +12,12 @@ spec:
   destinations:
     - server: https://kubernetes.default.svc
       namespace: hello-app
+    - server: https://kubernetes.default.svc
+      namespace: hello-app-dev
+    - server: https://kubernetes.default.svc
+      namespace: hello-app-staging
+    - server: https://kubernetes.default.svc
+      namespace: hello-app-prod
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
