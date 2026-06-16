@@ -10,6 +10,9 @@ on:
         type: choice
         options:
           - local
+          - dev
+          - staging
+          - prod
       image_tag:
         description: Image tag to build and write. Defaults to the short commit SHA.
         required: false
