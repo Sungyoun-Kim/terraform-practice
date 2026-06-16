@@ -283,12 +283,37 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 
    GitHub-hosted runner의 `localhost`는 이 Mac이 아니라 GitHub runner 자신입니다. 그래서 `localhost:5001` registry는 GitHub-hosted Actions에서 접근할 수 없습니다. 로컬 registry로 실습하려면 이 Mac에 self-hosted runner를 붙이고 workflow dispatch 입력의 runner를 `self-hosted`로 둡니다. GitHub-hosted runner를 쓸 때는 GHCR/ECR 같은 외부 registry를 사용합니다.
 
+   `act`로 GitHub Actions를 로컬 Docker에서 실행하면 이 Mac의 `localhost:5001` registry에 접근할 수 있습니다.
+
+   ```bash
+   brew install act
+
+   TAG="act-$(date +%Y%m%d%H%M%S)"
+   GITHUB_TOKEN="$(gh auth token)" act workflow_dispatch \
+     -W .github/workflows/update-hello-app-image.yaml \
+     -P ubuntu-latest=catthehacker/ubuntu:act-latest \
+     --input phase=local \
+     --input image_tag="${TAG}" \
+     --input registry=localhost:5001 \
+     --input image_repository=terraform-practice/hello-app \
+     --input runner=ubuntu-latest \
+     -s GITHUB_TOKEN
+   ```
+
+   이 workflow는 image가 이미 있으면 재사용하고, 없으면 build/push한 뒤 `charts/hello-app/values-local.yaml`의 tag를 바꾸는 PR을 만듭니다. PR을 merge하면 Argo CD가 Git 변경을 감지해서 `hello-app`을 새 이미지로 rollout합니다.
+
+   ```bash
+   kubectl --context docker-desktop -n argocd get application hello-app -o wide
+   kubectl --context docker-desktop -n hello-app get deployment hello-app -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+   curl -I http://hello.localhost
+   ```
+
    배포 흐름은 아래처럼 읽으면 됩니다.
 
    ```text
-   app source change
-   -> GitHub Actions build
-   -> image push
+   app source change 또는 workflow_dispatch
+   -> GitHub Actions 또는 act build
+   -> local registry image push
    -> charts/hello-app/values-local.yaml 변경 PR
    -> PR merge
    -> Argo CD sync
