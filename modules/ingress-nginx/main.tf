@@ -39,6 +39,10 @@ resource "helm_release" "ingress_nginx" {
         service = {
           type = "LoadBalancer"
         }
+
+        publishService = {
+          enabled = true
+        }
       }
     }),
   ]
