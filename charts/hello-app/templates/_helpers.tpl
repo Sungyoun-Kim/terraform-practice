@@ -21,6 +21,7 @@ app.kubernetes.io/name: {{ include "hello-app.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/environment: {{ .Values.environment.name | quote }}
 {{- end -}}
 
 {{- define "hello-app.selectorLabels" -}}

@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: hello-app-environments
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  generators:
+    - list:
+        elements:
+          - env: dev
+            namespace: hello-app-dev
+          - env: staging
+            namespace: hello-app-staging
+          - env: prod
+            namespace: hello-app-prod
+  template:
+    metadata:
+      name: hello-app-{{env}}
+    spec:
+      project: local-platform
+      source:
+        repoURL: https://github.com/Sungyoun-Kim/terraform-practice
+        targetRevision: main
+        path: charts/hello-app
+        helm:
+          releaseName: hello-app-{{env}}
+          valueFiles:
+            - values.yaml
+            - values-{{env}}.yaml
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true

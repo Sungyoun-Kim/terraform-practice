@@ -18,8 +18,10 @@ spec:
         - name: hello-app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if .Values.secretEnv.enabled }}
           env:
+            - name: APP_ENV
+              value: {{ .Values.environment.name | quote }}
+          {{- if .Values.secretEnv.enabled }}
             - name: HELLO_SECRET_MESSAGE
               valueFrom:
                 secretKeyRef:

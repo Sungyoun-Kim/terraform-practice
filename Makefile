@@ -5,6 +5,7 @@ ARGOCD_NAMESPACE ?= argocd
 ARGOCD_APP ?= kube-prometheus-stack
 ARGOCD_ROOT_APP ?= terraform-practice-root
 HELLO_APP_NAMESPACE ?= hello-app
+HELLO_APP_ENVIRONMENTS ?= dev staging prod
 BACKEND_CONFIG ?= backend/minio/backend.hcl
 MINIO_ACCESS_KEY ?= minioadmin
 MINIO_SECRET_KEY ?= minioadmin
@@ -23,7 +24,7 @@ VAULT_SECRET_PATH ?= secret/hello-app
 VAULT_SECRET_MESSAGE ?= hello from local Vault
 VAULT_SECRET_API_KEY ?= local-vault-api-key
 
-.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate registry-up registry-down registry-logs registry-catalog registry-tags demo-image-build demo-image-push demo-image vault-up vault-down vault-logs vault-status vault-wait vault-seed vault-token-secret vault-bootstrap vault-read init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-apps argocd-app argocd-root-app argocd-app-values argocd-password hello-app hello-secret external-secrets helm-status port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
+.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate registry-up registry-down registry-logs registry-catalog registry-tags demo-image-build demo-image-push demo-image vault-up vault-down vault-logs vault-status vault-wait vault-seed vault-token-secret vault-bootstrap vault-read init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-apps argocd-app argocd-root-app argocd-app-values argocd-password hello-app hello-envs hello-secret hello-env-secrets external-secrets helm-status port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
 
 backend-up:
 	$(MINIO_COMPOSE) up -d
@@ -87,10 +88,18 @@ vault-wait:
 
 vault-seed: vault-wait
 	docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv put $(VAULT_SECRET_PATH) message="$(VAULT_SECRET_MESSAGE)" api_key="$(VAULT_SECRET_API_KEY)"
+	@for env in $(HELLO_APP_ENVIRONMENTS); do \
+		docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv put secret/hello-app/$$env message="hello from local Vault ($$env)" api_key="local-vault-api-key-$$env"; \
+	done
 
 vault-token-secret:
 	kubectl --context $(CONTEXT) create namespace $(HELLO_APP_NAMESPACE) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
 	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) create secret generic vault-token --from-literal=token=$(VAULT_TOKEN) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
+	@for env in $(HELLO_APP_ENVIRONMENTS); do \
+		namespace="$(HELLO_APP_NAMESPACE)-$$env"; \
+		kubectl --context $(CONTEXT) create namespace $$namespace --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -; \
+		kubectl --context $(CONTEXT) -n $$namespace create secret generic vault-token --from-literal=token=$(VAULT_TOKEN) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -; \
+	done
 
 vault-bootstrap: vault-up vault-seed vault-token-secret
 
@@ -162,8 +171,23 @@ argocd-password:
 hello-app:
 	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) get pods,svc,ingress
 
+hello-envs:
+	@for env in $(HELLO_APP_ENVIRONMENTS); do \
+		namespace="$(HELLO_APP_NAMESPACE)-$$env"; \
+		echo "== $$namespace =="; \
+		kubectl --context $(CONTEXT) -n $$namespace get pods,svc,ingress; \
+	done
+
 hello-secret:
 	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) get secret hello-app-secret -o yaml
+
+hello-env-secrets:
+	@for env in $(HELLO_APP_ENVIRONMENTS); do \
+		namespace="$(HELLO_APP_NAMESPACE)-$$env"; \
+		echo "== $$namespace =="; \
+		kubectl --context $(CONTEXT) -n $$namespace get secretstore,externalsecret; \
+		kubectl --context $(CONTEXT) -n $$namespace get secret hello-app-secret; \
+	done
 
 external-secrets:
 	kubectl --context $(CONTEXT) -n external-secrets get pods
@@ -185,6 +209,9 @@ port-forward-alertmanager:
 urls:
 	@echo "Argo CD:      http://argocd.localhost"
 	@echo "Hello App:    http://hello.localhost"
+	@echo "Hello Dev:    http://hello-dev.localhost"
+	@echo "Hello Stg:    http://hello-staging.localhost"
+	@echo "Hello Prod:   http://hello-prod.localhost"
 	@echo "Grafana:      http://grafana.localhost"
 	@echo "Prometheus:   http://prometheus.localhost"
 	@echo "Alertmanager: http://alertmanager.localhost"
