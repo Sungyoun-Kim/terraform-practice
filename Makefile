@@ -15,8 +15,15 @@ REGISTRY_COMPOSE ?= docker compose -f backend/registry/compose.yaml
 DEMO_APP_NAME ?= terraform-practice/hello-app
 DEMO_APP_TAG ?= 0.1.0-local
 DEMO_IMAGE ?= $(REGISTRY_HOST)/$(DEMO_APP_NAME):$(DEMO_APP_TAG)
+VAULT_COMPOSE ?= docker compose -f backend/vault/compose.yaml
+VAULT_CONTAINER ?= terraform-practice-vault
+VAULT_ADDR ?= http://127.0.0.1:8200
+VAULT_TOKEN ?= root
+VAULT_SECRET_PATH ?= secret/hello-app
+VAULT_SECRET_MESSAGE ?= hello from local Vault
+VAULT_SECRET_API_KEY ?= local-vault-api-key
 
-.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate registry-up registry-down registry-logs registry-catalog registry-tags demo-image-build demo-image-push demo-image init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-apps argocd-app argocd-root-app argocd-app-values argocd-password hello-app helm-status port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
+.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate registry-up registry-down registry-logs registry-catalog registry-tags demo-image-build demo-image-push demo-image vault-up vault-down vault-logs vault-status vault-wait vault-seed vault-token-secret vault-bootstrap vault-read init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-apps argocd-app argocd-root-app argocd-app-values argocd-password hello-app hello-secret external-secrets helm-status port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
 
 backend-up:
 	$(MINIO_COMPOSE) up -d
@@ -55,6 +62,40 @@ demo-image-push:
 	docker push $(DEMO_IMAGE)
 
 demo-image: registry-up demo-image-build demo-image-push
+
+vault-up:
+	$(VAULT_COMPOSE) up -d
+
+vault-down:
+	$(VAULT_COMPOSE) down
+
+vault-logs:
+	$(VAULT_COMPOSE) logs -f vault
+
+vault-status:
+	docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault status
+
+vault-wait:
+	@for i in $$(seq 1 30); do \
+		if docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault status >/dev/null 2>&1; then \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "Vault did not become ready in time" >&2; \
+	exit 1
+
+vault-seed: vault-wait
+	docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv put $(VAULT_SECRET_PATH) message="$(VAULT_SECRET_MESSAGE)" api_key="$(VAULT_SECRET_API_KEY)"
+
+vault-token-secret:
+	kubectl --context $(CONTEXT) create namespace $(HELLO_APP_NAMESPACE) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
+	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) create secret generic vault-token --from-literal=token=$(VAULT_TOKEN) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
+
+vault-bootstrap: vault-up vault-seed vault-token-secret
+
+vault-read:
+	docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv get $(VAULT_SECRET_PATH)
 
 init:
 	$(TF_BACKEND_ENV) terraform init -backend-config=$(BACKEND_CONFIG)
@@ -120,6 +161,13 @@ argocd-password:
 
 hello-app:
 	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) get pods,svc,ingress
+
+hello-secret:
+	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) get secret hello-app-secret -o yaml
+
+external-secrets:
+	kubectl --context $(CONTEXT) -n external-secrets get pods
+	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) get secretstore,externalsecret
 
 helm-status:
 	helm status argocd -n $(ARGOCD_NAMESPACE)

@@ -18,6 +18,19 @@ spec:
         - name: hello-app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.secretEnv.enabled }}
+          env:
+            - name: HELLO_SECRET_MESSAGE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretEnv.secretName }}
+                  key: message
+            - name: HELLO_SECRET_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secretEnv.secretName }}
+                  key: api_key
+          {{- end }}
           ports:
             - name: http
               containerPort: 80

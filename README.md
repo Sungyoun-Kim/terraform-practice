@@ -15,11 +15,13 @@ Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 - Argo CD: `argo/argo-cd` `9.5.21`
 - Remote backend: local MinIO through Terraform S3 backend
 - Local image registry: Docker Registry on `localhost:5001`
+- Local secret manager: Vault dev server on `localhost:8200`
+- External Secrets Operator: `external-secrets/external-secrets` `2.6.0`
 - GitOps demo app: `hello-app` served at <http://hello.localhost>
 
 루트 프로젝트는 `modules/ingress-nginx`, `modules/argocd`, `modules/monitoring-stack`을 조립합니다. Terraform은 ingress-nginx, Argo CD, namespace, Ingress, bootstrap Application, Secret 같은 플랫폼 경계를 관리합니다. kube-prometheus-stack의 세부 Kubernetes 리소스는 Argo CD Application이 Helm chart를 렌더링해서 관리합니다.
 
-샘플 `hello-app`은 Argo CD root Application이 이 repo의 `gitops/root` 경로를 바라보고, 그 안의 Application이 `charts/hello-app` Helm chart를 배포합니다. 이 흐름은 Terraform이 앱 Deployment를 직접 만들지 않고 Argo CD가 Git repo를 source of truth로 삼는 GitOps 연습용입니다.
+샘플 `hello-app`은 Argo CD root Application이 이 repo의 `gitops/root` 경로를 바라보고, 그 안의 Application이 `charts/hello-app` Helm chart를 배포합니다. 이 흐름은 Terraform이 앱 Deployment를 직접 만들지 않고 Argo CD가 Git repo를 source of truth로 삼는 GitOps 연습용입니다. Secret 값은 Git에 저장하지 않고, 로컬 Vault에 저장한 뒤 External Secrets Operator가 Kubernetes Secret으로 동기화합니다.
 
 ## 사전 준비
 
@@ -320,7 +322,43 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    -> hello-app rollout
    ```
 
-11. 전체 삭제
+11. Vault + External Secrets Operator 실습
+
+   로컬 Vault dev server를 띄우고 샘플 secret을 주입합니다. 이 값은 Git에 저장되지 않습니다.
+
+   ```bash
+   make vault-bootstrap
+   make vault-read
+   ```
+
+   `make vault-bootstrap`은 아래 작업을 수행합니다.
+
+   ```text
+   Vault dev server 실행
+   -> Vault KV v2 경로 secret/hello-app 에 값 저장
+   -> hello-app namespace에 vault-token Kubernetes Secret 생성
+   ```
+
+   Argo CD root Application은 `external-secrets` Helm chart를 설치하고, `gitops/hello-app-secrets` 경로의 `SecretStore`와 `ExternalSecret`을 배포합니다. ESO는 Vault에서 값을 읽어 `hello-app-secret` Kubernetes Secret을 만듭니다.
+
+   ```bash
+   make external-secrets
+   make hello-secret
+   kubectl --context docker-desktop -n hello-app get deployment hello-app -o jsonpath='{.spec.template.spec.containers[0].env}{"\n"}'
+   ```
+
+   Secret 흐름은 아래처럼 읽으면 됩니다.
+
+   ```text
+   local Vault secret/hello-app
+   -> External Secrets Operator
+   -> Kubernetes Secret hello-app/hello-app-secret
+   -> hello-app Deployment env
+   ```
+
+   이 구성은 로컬 학습용입니다. Vault dev mode의 root token은 `root`로 고정되어 있고, 실제 운영에서는 Vault를 dev mode로 실행하지 않습니다. EKS에서는 같은 패턴으로 Vault 대신 AWS Secrets Manager 또는 SSM Parameter Store를 SecretStore provider로 쓰는 경우가 많습니다.
+
+12. 전체 삭제
 
    ```bash
    make destroy
@@ -351,7 +389,10 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 │   │   ├── backend.hcl
 │   │   ├── compose.yaml
 │   │   └── README.md
-│   └── registry/
+│   ├── registry/
+│   │   ├── compose.yaml
+│   │   └── README.md
+│   └── vault/
 │       ├── compose.yaml
 │       └── README.md
 ├── apps/
@@ -365,7 +406,11 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 │       ├── values-local.yaml
 │       └── templates/
 ├── gitops/
+│   ├── hello-app-secrets/
+│   │   └── vault-secret-store.yaml
 │   └── root/
+│       ├── external-secrets.yaml
+│       ├── hello-app-secrets.yaml
 │       ├── hello-app.yaml
 │       └── local-platform-project.yaml
 ├── .github/
@@ -403,6 +448,8 @@ make backend-objects
 make registry-up
 make demo-image
 make registry-tags
+make vault-bootstrap
+make vault-read
 make validate
 make plan
 make apply
@@ -413,6 +460,8 @@ make argocd
 make argocd-app
 make argocd-root-app
 make hello-app
+make external-secrets
+make hello-secret
 make argocd-password
 make helm-status
 make urls
