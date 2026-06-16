@@ -28,6 +28,11 @@ output "argocd_monitoring_application" {
   value       = "${module.argocd.namespace}/${kubernetes_manifest.kube_prometheus_stack_application.manifest.metadata.name}"
 }
 
+output "argocd_root_application" {
+  description = "Argo CD root Application watching this repo's gitops/root path."
+  value       = "${module.argocd.namespace}/${kubernetes_manifest.gitops_root_application.manifest.metadata.name}"
+}
+
 output "status_command" {
   description = "Check monitoring resources reconciled by Argo CD."
   value       = "kubectl --context ${var.kubernetes_context} -n ${var.namespace} get pods,svc,pvc"
@@ -40,7 +45,9 @@ output "argocd_status_command" {
 
 output "ingress_urls" {
   description = "Local URLs routed by ingress-nginx."
-  value       = module.monitoring_stack.ingress_urls
+  value = merge(module.monitoring_stack.ingress_urls, {
+    hello_app = "http://hello.localhost"
+  })
 }
 
 output "ingress_status_command" {

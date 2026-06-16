@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: local-platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  description: Local learning project for apps managed from this repository.
+  sourceRepos:
+    - https://github.com/Sungyoun-Kim/terraform-practice
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: hello-app
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

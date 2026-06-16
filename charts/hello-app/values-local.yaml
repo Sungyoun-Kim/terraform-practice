@@ -1,0 +1,11 @@
+image:
+  repository: localhost:5001/terraform-practice/hello-app
+  tag: "0.1.0-local"
+  pullPolicy: IfNotPresent
+
+ingress:
+  hosts:
+    - host: hello.localhost
+      paths:
+        - path: /
+          pathType: Prefix

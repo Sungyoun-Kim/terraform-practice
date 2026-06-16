@@ -1,0 +1,133 @@
+name: Update hello-app image
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Environment values file suffix to update.
+        required: true
+        default: local
+        type: choice
+        options:
+          - local
+      image_tag:
+        description: Image tag to build and write. Defaults to the short commit SHA.
+        required: false
+        default: ""
+      registry:
+        description: Container registry host. localhost only works from a self-hosted runner on this Mac.
+        required: true
+        default: localhost:5001
+      image_repository:
+        description: Image repository path inside the registry.
+        required: true
+        default: terraform-practice/hello-app
+      runner:
+        description: Runner label. Use self-hosted for the local registry, ubuntu-latest for external registries.
+        required: true
+        default: self-hosted
+        type: choice
+        options:
+          - self-hosted
+          - ubuntu-latest
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
+jobs:
+  build-and-open-pr:
+    runs-on: ${{ inputs.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="${{ inputs.image_tag }}"
+          if [[ -z "${tag}" ]]; then
+            tag="${GITHUB_SHA::12}"
+          fi
+
+          image_repository="${{ inputs.registry }}/${{ inputs.image_repository }}"
+          image="${image_repository}:${tag}"
+          safe_tag="$(printf '%s' "${tag}" | tr -c 'A-Za-z0-9._-' '-')"
+
+          {
+            echo "tag=${tag}"
+            echo "safe_tag=${safe_tag}"
+            echo "image_repository=${image_repository}"
+            echo "image=${image}"
+            echo "values_file=charts/hello-app/values-${{ inputs.phase }}.yaml"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Login to GHCR
+        if: ${{ startsWith(inputs.registry, 'ghcr.io') }}
+        shell: bash
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Check whether image already exists
+        id: existing
+        shell: bash
+        run: |
+          set +e
+          docker pull "${{ steps.image.outputs.image }}"
+          status="$?"
+          set -e
+
+          if [[ "${status}" == "0" ]]; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+            echo "Image already exists: ${{ steps.image.outputs.image }}"
+          else
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+            echo "Image does not exist yet: ${{ steps.image.outputs.image }}"
+          fi
+
+      - name: Build and push image
+        if: ${{ steps.existing.outputs.exists == 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build -t "${{ steps.image.outputs.image }}" apps/hello-app
+          docker push "${{ steps.image.outputs.image }}"
+
+      - name: Update Helm values
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          values_file="${{ steps.image.outputs.values_file }}"
+          test -f "${values_file}"
+
+          sed -i.bak -E "s|^  repository: .*|  repository: ${{ steps.image.outputs.image_repository }}|" "${values_file}"
+          sed -i.bak -E "s|^  tag: .*|  tag: \"${{ steps.image.outputs.tag }}\"|" "${values_file}"
+          rm -f "${values_file}.bak"
+
+          git diff -- "${values_file}"
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: ${{ steps.image.outputs.values_file }}
+          branch: automation/update-hello-app-${{ inputs.phase }}-${{ steps.image.outputs.safe_tag }}
+          commit-message: Update hello-app ${{ inputs.phase }} image to ${{ steps.image.outputs.tag }}
+          title: Update hello-app ${{ inputs.phase }} image to ${{ steps.image.outputs.tag }}
+          body: |
+            Updates `hello-app` for `${{ inputs.phase }}`.
+
+            Image:
+
+            ```text
+            ${{ steps.image.outputs.image }}
+            ```
+
+            If the image already existed in the registry, the workflow reused it instead of rebuilding.
+          delete-branch: true

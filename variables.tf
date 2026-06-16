@@ -82,6 +82,18 @@ variable "argocd_ingress_host" {
   default     = "argocd.localhost"
 }
 
+variable "gitops_repo_url" {
+  description = "Git repository URL watched by the Argo CD root Application."
+  type        = string
+  default     = "https://github.com/Sungyoun-Kim/terraform-practice"
+}
+
+variable "gitops_target_revision" {
+  description = "Git revision watched by the Argo CD root Application."
+  type        = string
+  default     = "main"
+}
+
 variable "grafana_ingress_host" {
   description = "Hostname routed to Grafana through ingress-nginx."
   type        = string
