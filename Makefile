@@ -97,7 +97,7 @@ vault-seed: vault-wait
 	done
 
 vault-token-secret:
-	kubectl --context $(CONTEXT) create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
+	kubectl --context $(CONTEXT) get namespace $(NAMESPACE) >/dev/null 2>&1 || kubectl --context $(CONTEXT) create namespace $(NAMESPACE)
 	kubectl --context $(CONTEXT) -n $(NAMESPACE) create secret generic vault-token --from-literal=token=$(VAULT_TOKEN) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
 	kubectl --context $(CONTEXT) create namespace $(HELLO_APP_NAMESPACE) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
 	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) create secret generic vault-token --from-literal=token=$(VAULT_TOKEN) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
