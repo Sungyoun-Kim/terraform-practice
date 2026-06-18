@@ -19,11 +19,4 @@ argocd_ingress_host  = "argocd.localhost"
 gitops_repo_url         = "https://github.com/Sungyoun-Kim/terraform-practice"
 gitops_target_revision = "main"
 
-grafana_ingress_host      = "grafana.localhost"
-prometheus_ingress_host   = "prometheus.localhost"
-alertmanager_ingress_host = "alertmanager.localhost"
-
-grafana_admin_user     = "admin"
-grafana_admin_password = "admin"
-
 kubernetes_insecure_skip_tls_verify = false

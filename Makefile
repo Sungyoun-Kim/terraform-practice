@@ -23,8 +23,11 @@ VAULT_TOKEN ?= root
 VAULT_SECRET_PATH ?= secret/hello-app
 VAULT_SECRET_MESSAGE ?= hello from local Vault
 VAULT_SECRET_API_KEY ?= local-vault-api-key
+VAULT_MONITORING_SECRET_PATH ?= secret/monitoring/grafana-admin
+GRAFANA_ADMIN_USER ?= admin
+GRAFANA_ADMIN_PASSWORD ?= admin
 
-.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate registry-up registry-down registry-logs registry-catalog registry-tags demo-image-build demo-image-push demo-image vault-up vault-down vault-logs vault-status vault-wait vault-seed vault-token-secret vault-bootstrap vault-read init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-apps argocd-app argocd-root-app argocd-app-values argocd-password hello-app hello-envs hello-secret hello-env-secrets external-secrets helm-status port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
+.PHONY: backend-up backend-down backend-logs backend-objects backend-migrate registry-up registry-down registry-logs registry-catalog registry-tags demo-image-build demo-image-push demo-image vault-up vault-down vault-logs vault-status vault-wait vault-seed vault-token-secret vault-bootstrap vault-read vault-read-monitoring init fmt validate plan plan-file apply destroy output state ps services pvc ingress ingress-controller argocd argocd-apps argocd-app argocd-root-app argocd-app-values argocd-password hello-app hello-envs hello-secret hello-env-secrets monitoring-secret external-secrets helm-status port-forward-prometheus port-forward-grafana port-forward-alertmanager urls
 
 backend-up:
 	$(MINIO_COMPOSE) up -d
@@ -88,11 +91,14 @@ vault-wait:
 
 vault-seed: vault-wait
 	docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv put $(VAULT_SECRET_PATH) message="$(VAULT_SECRET_MESSAGE)" api_key="$(VAULT_SECRET_API_KEY)"
+	docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv put $(VAULT_MONITORING_SECRET_PATH) admin-user="$(GRAFANA_ADMIN_USER)" admin-password="$(GRAFANA_ADMIN_PASSWORD)"
 	@for env in $(HELLO_APP_ENVIRONMENTS); do \
 		docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv put secret/hello-app/$$env message="hello from local Vault ($$env)" api_key="local-vault-api-key-$$env"; \
 	done
 
 vault-token-secret:
+	kubectl --context $(CONTEXT) create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) create secret generic vault-token --from-literal=token=$(VAULT_TOKEN) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
 	kubectl --context $(CONTEXT) create namespace $(HELLO_APP_NAMESPACE) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
 	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) create secret generic vault-token --from-literal=token=$(VAULT_TOKEN) --dry-run=client -o yaml | kubectl --context $(CONTEXT) apply -f -
 	@for env in $(HELLO_APP_ENVIRONMENTS); do \
@@ -105,6 +111,9 @@ vault-bootstrap: vault-up vault-seed vault-token-secret
 
 vault-read:
 	docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv get $(VAULT_SECRET_PATH)
+
+vault-read-monitoring:
+	docker exec -e VAULT_ADDR=$(VAULT_ADDR) -e VAULT_TOKEN=$(VAULT_TOKEN) $(VAULT_CONTAINER) vault kv get $(VAULT_MONITORING_SECRET_PATH)
 
 init:
 	$(TF_BACKEND_ENV) terraform init -backend-config=$(BACKEND_CONFIG)
@@ -189,8 +198,13 @@ hello-env-secrets:
 		kubectl --context $(CONTEXT) -n $$namespace get secret hello-app-secret; \
 	done
 
+monitoring-secret:
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) get secretstore,externalsecret
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) get secret prometheus-stack-grafana-admin
+
 external-secrets:
 	kubectl --context $(CONTEXT) -n external-secrets get pods
+	kubectl --context $(CONTEXT) -n $(NAMESPACE) get secretstore,externalsecret
 	kubectl --context $(CONTEXT) -n $(HELLO_APP_NAMESPACE) get secretstore,externalsecret
 
 helm-status:

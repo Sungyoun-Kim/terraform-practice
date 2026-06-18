@@ -24,16 +24,9 @@ module "argocd" {
 module "monitoring_stack" {
   source = "./modules/monitoring-stack"
 
-  namespace              = var.namespace
-  release_name           = var.release_name
-  chart_version          = var.chart_version
-  grafana_admin_user     = var.grafana_admin_user
-  grafana_admin_password = var.grafana_admin_password
-
-  ingress_class_name        = var.ingress_class_name
-  grafana_ingress_host      = var.grafana_ingress_host
-  prometheus_ingress_host   = var.prometheus_ingress_host
-  alertmanager_ingress_host = var.alertmanager_ingress_host
+  namespace     = var.namespace
+  release_name  = var.release_name
+  chart_version = var.chart_version
 
   depends_on = [
     module.ingress_nginx,

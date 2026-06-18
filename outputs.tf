@@ -45,7 +45,7 @@ output "argocd_status_command" {
 
 output "ingress_urls" {
   description = "Local URLs routed by ingress-nginx."
-  value = merge(module.monitoring_stack.ingress_urls, {
+  value = merge(local.monitoring_ingress_urls, {
     hello_app = "http://hello.localhost"
   })
 }

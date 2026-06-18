@@ -17,18 +17,3 @@ moved {
   from = helm_release.kube_prometheus_stack
   to   = module.monitoring_stack.helm_release.kube_prometheus_stack
 }
-
-moved {
-  from = kubernetes_ingress_v1.grafana
-  to   = module.monitoring_stack.kubernetes_ingress_v1.grafana
-}
-
-moved {
-  from = kubernetes_ingress_v1.prometheus
-  to   = module.monitoring_stack.kubernetes_ingress_v1.prometheus
-}
-
-moved {
-  from = kubernetes_ingress_v1.alertmanager
-  to   = module.monitoring_stack.kubernetes_ingress_v1.alertmanager
-}

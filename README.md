@@ -20,7 +20,22 @@ Terraform을 로컬에서 손으로 익히기 위한 실습 repo입니다.
 - GitOps demo app: `hello-app` served at <http://hello.localhost>
 - ApplicationSet demo: `hello-app-dev`, `hello-app-staging`, `hello-app-prod`
 
-루트 프로젝트는 `modules/ingress-nginx`, `modules/argocd`, `modules/monitoring-stack`을 조립합니다. Terraform은 ingress-nginx, Argo CD, namespace, Ingress, bootstrap Application, Secret 같은 플랫폼 경계를 관리합니다. kube-prometheus-stack의 세부 Kubernetes 리소스는 Argo CD Application이 Helm chart를 렌더링해서 관리합니다.
+루트 프로젝트는 `modules/ingress-nginx`, `modules/argocd`, `modules/monitoring-stack`을 조립합니다. Terraform은 ingress-nginx, Argo CD, monitoring namespace, bootstrap Application 같은 플랫폼 경계를 관리합니다. kube-prometheus-stack의 세부 Kubernetes 리소스는 Argo CD Application이 Helm chart를 렌더링해서 관리합니다.
+
+Monitoring stack은 아래처럼 소유권을 나눕니다.
+
+```text
+Terraform
+-> monitoring-helm namespace
+-> Argo CD Application: kube-prometheus-stack
+
+Argo CD + Helm values
+-> Grafana / Prometheus / Alertmanager Ingress
+-> kube-prometheus-stack 세부 Kubernetes 리소스
+
+Argo CD + External Secrets Operator
+-> Grafana admin Secret
+```
 
 샘플 `hello-app`은 Argo CD root Application이 이 repo의 `gitops/root` 경로를 바라보고, 그 안의 Application이 `charts/hello-app` Helm chart를 배포합니다. 이 흐름은 Terraform이 앱 Deployment를 직접 만들지 않고 Argo CD가 Git repo를 source of truth로 삼는 GitOps 연습용입니다. Secret 값은 Git에 저장하지 않고, 로컬 Vault에 저장한 뒤 External Secrets Operator가 Kubernetes Secret으로 동기화합니다.
 
@@ -231,13 +246,12 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    확인할 리소스:
 
    - `module.monitoring_stack.kubernetes_namespace_v1.monitoring`
-   - `module.monitoring_stack.kubernetes_secret_v1.grafana_admin`
-   - `module.monitoring_stack.kubernetes_ingress_v1.*`
    - `module.ingress_nginx.kubernetes_namespace_v1.ingress_nginx`
    - `module.ingress_nginx.helm_release.ingress_nginx`
    - `module.argocd.kubernetes_namespace_v1.argocd`
    - `module.argocd.helm_release.argocd`
    - `kubernetes_manifest.kube_prometheus_stack_application`
+   - `kubernetes_manifest.gitops_root_application`
 
    kube-prometheus-stack 자체는 Terraform `helm_release`가 아니라 Argo CD `Application`으로 잡힙니다.
 
@@ -265,7 +279,7 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform state show module.ingress_nginx.helm_release.ingress_nginx
    ```
 
-   Terraform은 chart가 만든 모든 Pod/Service를 개별 resource로 들고 있지 않고, Argo CD Application을 bootstrap 리소스로 추적합니다. Ingress와 Grafana admin Secret은 Terraform 리소스로 직접 선언합니다.
+   Terraform은 chart가 만든 모든 Pod/Service/Ingress를 개별 resource로 들고 있지 않고, Argo CD Application을 bootstrap 리소스로 추적합니다. Grafana admin Secret은 Terraform state에 넣지 않고, Vault와 External Secrets Operator로 동기화합니다.
 
 5. Module 경계 보기
 
@@ -278,11 +292,13 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 
    `moved.tf`는 이전 루트 리소스 주소를 module 주소로 옮긴 기록입니다. 기존 리소스를 삭제/재생성하지 않고 코드 구조만 바꿀 때 사용합니다.
 
-   `removed.tf`는 예전에 Terraform이 관리하던 `helm_release.kube_prometheus_stack`을 destroy 없이 state에서 제거한 이관 기록입니다. 지금 kube-prometheus-stack은 Argo CD가 관리합니다.
+   `removed.tf`는 Terraform이 더 이상 직접 관리하지 않는 리소스를 state에서만 제거하기 위한 이관 기록입니다. 예를 들어 예전 `helm_release.kube_prometheus_stack`은 Argo CD Application으로, Grafana admin Secret은 External Secrets Operator로 소유권을 넘깁니다.
 
 6. Helm values 변경해보기
 
    `values/kube-prometheus-stack.yaml`에서 Grafana, Prometheus, Alertmanager 설정을 바꾼 뒤 plan/apply를 실행합니다. Terraform은 Argo CD Application spec을 바꾸고, Argo CD가 클러스터 리소스를 sync합니다.
+
+   Grafana, Prometheus, Alertmanager Ingress도 이 values 파일에서 관리합니다. chart가 공식으로 지원하는 설정은 Terraform `kubernetes_ingress`로 따로 만들지 않고 Helm values에 두는 쪽이 chart upgrade에 더 강합니다.
 
    ```bash
    make plan
@@ -369,6 +385,7 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    ```bash
    make vault-bootstrap
    make vault-read
+   make vault-read-monitoring
    ```
 
    `make vault-bootstrap`은 아래 작업을 수행합니다.
@@ -376,13 +393,16 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    ```text
    Vault dev server 실행
    -> Vault KV v2 경로 secret/hello-app 에 값 저장
+   -> Vault KV v2 경로 secret/monitoring/grafana-admin 에 Grafana admin 값 저장
+   -> monitoring-helm namespace에 vault-token Kubernetes Secret 생성
    -> hello-app namespace에 vault-token Kubernetes Secret 생성
    ```
 
-   Argo CD root Application은 `external-secrets` Helm chart를 설치하고, `gitops/hello-app-secrets` 경로의 `SecretStore`와 `ExternalSecret`을 배포합니다. ESO는 Vault에서 값을 읽어 `hello-app-secret` Kubernetes Secret을 만듭니다.
+   Argo CD root Application은 `external-secrets` Helm chart를 설치하고, `gitops/monitoring-secrets`, `gitops/hello-app-secrets` 경로의 `SecretStore`와 `ExternalSecret`을 배포합니다. ESO는 Vault에서 값을 읽어 Grafana admin Secret과 `hello-app-secret` Kubernetes Secret을 만듭니다.
 
    ```bash
    make external-secrets
+   make monitoring-secret
    make hello-secret
    kubectl --context docker-desktop -n hello-app get deployment hello-app -o jsonpath='{.spec.template.spec.containers[0].env}{"\n"}'
    ```
@@ -390,6 +410,11 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
    Secret 흐름은 아래처럼 읽으면 됩니다.
 
    ```text
+   local Vault secret/monitoring/grafana-admin
+   -> External Secrets Operator
+   -> Kubernetes Secret monitoring-helm/prometheus-stack-grafana-admin
+   -> Grafana admin existingSecret
+
    local Vault secret/hello-app
    -> External Secrets Operator
    -> Kubernetes Secret hello-app/hello-app-secret
@@ -456,6 +481,7 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 ```text
 .
 ├── main.tf
+├── locals.tf
 ├── backend.tf
 ├── argocd_applications.tf
 ├── moved.tf
@@ -496,12 +522,15 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 ├── gitops/
 │   ├── hello-app-secrets/
 │   │   └── vault-secret-store.yaml
+│   ├── monitoring-secrets/
+│   │   └── vault-secret-store.yaml
 │   └── root/
 │       ├── external-secrets.yaml
 │       ├── hello-app-environments.yaml
 │       ├── hello-app-secrets-environments.yaml
 │       ├── hello-app-secrets.yaml
 │       ├── hello-app.yaml
+│       ├── monitoring-secrets.yaml
 │       └── local-platform-project.yaml
 ├── .github/
 │   └── workflows/
@@ -517,7 +546,6 @@ kubectl --context docker-desktop -n monitoring-helm port-forward svc/alertmanage
 │   │   └── outputs.tf
 │   └── monitoring-stack/
 │       ├── main.tf
-│       ├── ingress.tf
 │       ├── variables.tf
 │       └── outputs.tf
 ├── values/
@@ -540,6 +568,7 @@ make demo-image
 make registry-tags
 make vault-bootstrap
 make vault-read
+make vault-read-monitoring
 make validate
 make plan
 make apply
@@ -552,6 +581,7 @@ make argocd-root-app
 make hello-app
 make hello-envs
 make external-secrets
+make monitoring-secret
 make hello-secret
 make hello-env-secrets
 make argocd-password

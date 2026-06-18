@@ -93,34 +93,3 @@ variable "gitops_target_revision" {
   type        = string
   default     = "main"
 }
-
-variable "grafana_ingress_host" {
-  description = "Hostname routed to Grafana through ingress-nginx."
-  type        = string
-  default     = "grafana.localhost"
-}
-
-variable "prometheus_ingress_host" {
-  description = "Hostname routed to Prometheus through ingress-nginx."
-  type        = string
-  default     = "prometheus.localhost"
-}
-
-variable "alertmanager_ingress_host" {
-  description = "Hostname routed to Alertmanager through ingress-nginx."
-  type        = string
-  default     = "alertmanager.localhost"
-}
-
-variable "grafana_admin_user" {
-  description = "Grafana admin username."
-  type        = string
-  default     = "admin"
-}
-
-variable "grafana_admin_password" {
-  description = "Grafana admin password for local learning only."
-  type        = string
-  default     = "admin"
-  sensitive   = true
-}

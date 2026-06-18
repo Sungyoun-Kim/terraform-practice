@@ -12,6 +12,13 @@ grafana:
     userKey: admin-user
     passwordKey: admin-password
 
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.localhost
+    path: /
+
   service:
     type: ClusterIP
     port: 3000
@@ -32,6 +39,15 @@ grafana:
       memory: 512Mi
 
 prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - prometheus.localhost
+    paths:
+      - /
+    pathType: Prefix
+
   service:
     type: ClusterIP
     port: 9090
@@ -59,6 +75,15 @@ prometheus:
         memory: 1Gi
 
 alertmanager:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - alertmanager.localhost
+    paths:
+      - /
+    pathType: Prefix
+
   service:
     type: ClusterIP
     port: 9093

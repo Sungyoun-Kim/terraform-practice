@@ -12,17 +12,3 @@ output "chart" {
   description = "Helm chart and version installed by Argo CD."
   value       = "kube-prometheus-stack@${var.chart_version}"
 }
-
-output "grafana_admin_secret_name" {
-  description = "Secret used by Grafana for the local admin account."
-  value       = kubernetes_secret_v1.grafana_admin.metadata[0].name
-}
-
-output "ingress_urls" {
-  description = "Local URLs routed by ingress-nginx."
-  value = {
-    grafana      = "http://${var.grafana_ingress_host}"
-    prometheus   = "http://${var.prometheus_ingress_host}"
-    alertmanager = "http://${var.alertmanager_ingress_host}"
-  }
-}
