@@ -118,6 +118,40 @@ AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin terraform plan
 
 Docker volume `minio_minio-data`를 삭제하면 이 로컬 remote state도 삭제됩니다.
 
+## HCL, State, 실제 리소스 관계
+
+Terraform을 읽을 때는 세 가지를 분리해서 보면 이해하기 쉽습니다.
+
+```text
+HCL          = 원하는 설계도
+remote state = Terraform의 기억/주소록
+실제 리소스   = Kubernetes, Helm, cloud provider에 실제 존재하는 것
+```
+
+이 프로젝트는 MinIO remote backend를 사용하므로 `plan`, `apply`, `import`, `state list` 같은 Terraform 명령은 로컬 `terraform.tfstate`가 아니라 MinIO의 remote state를 기준으로 동작합니다.
+
+| HCL | State | 실제 리소스 | 상황 | 대응 |
+| --- | --- | --- | --- | --- |
+| 있음 | 있음 | 있음 | 정상 관리 중 | `plan`이 `No changes`면 정상 |
+| 있음 | 있음 | 있음, 값 다름 | 누가 수동 수정한 drift | 원복하려면 `apply`, 수동 변경을 인정하려면 HCL 수정 |
+| 있음 | 있음 | 없음 | 수동 삭제됨 | 다시 만들려면 `apply`, 없애는 게 맞으면 HCL 제거 후 정리 |
+| 있음 | 없음 | 있음 | 수동 생성한 리소스를 Terraform에 편입하려는 상황 | `terraform import` |
+| 있음 | 없음 | 없음 | 새 리소스 추가 | 그냥 `apply` |
+| 없음 | 있음 | 있음 | 코드에서 제거했지만 state에는 남음 | 삭제할 거면 `apply`, 관리만 중단하려면 `terraform state rm` 또는 `removed` block |
+| 없음 | 있음 | 없음 | state에 찌꺼기만 남음 | `terraform state rm` 또는 refresh/apply로 정리 |
+| 없음 | 없음 | 있음 | Terraform 밖의 unmanaged 리소스 | 관리하려면 HCL 작성 후 `import`, 아니면 수동 삭제/방치 |
+| 없음 | 없음 | 없음 | 아무 관계 없음 | 할 일 없음 |
+
+`terraform import`, `terraform state mv`, `terraform state rm`은 실제 리소스를 바로 만들거나 수정하는 명령이 아니라 state의 연결 정보를 다루는 명령입니다.
+
+```text
+terraform import   = 실제 리소스를 state에 연결
+terraform state mv = state 안의 Terraform 주소 변경
+terraform state rm = state에서 연결 제거
+```
+
+한 줄로 정리하면 `HCL은 의도`, `state는 연결 정보`, `실제 리소스는 현실`입니다. `terraform plan`은 이 셋을 비교해서 의도대로 현실을 맞추려면 무엇을 해야 하는지 보여줍니다.
+
 ## UI 접속
 
 이 프로젝트는 `ingress-nginx`를 함께 설치해서 로컬 브라우저에서 Ingress hostname으로 접속합니다.
